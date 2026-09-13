@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="SelfAD administration.">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v={{ static_version('app.css') }}">
+  </head>
+  <body style="{{ palette_style }}" data-admin-section="{{ active_section }}">
+    <div class="page page--admin">
+      <header class="site-header">
+        <a class="logo" href="/" aria-label="SelfAD home">
+          {% if show_standard_logo %}
+            <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">
+          {% endif %}
+          <span class="logo-text">
+            {{ brand_title }}{% if brand_title == 'SelfAD' %}<b>.</b>{% endif %}
+          </span>
+        </a>
+
+        <nav aria-label="Main navigation">
+          <a class="active" href="/admin">Admin panel</a>
+          <a href="/services">Services</a>
+          <a href="/scoreboard">Scoreboard</a>
+          <form class="logout-form" method="post" action="{{ url_for('logout') }}">
+            <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+            <button type="submit">Log out</button>
+          </form>
+        </nav>
+      </header>
+
+      <main class="admin-main">
+        <section class="admin-heading" aria-labelledby="admin-title">
+          <p class="eyebrow">Administration</p>
+          <h1 id="admin-title">Welcome, {{ current_user.username }}.</h1>
+          <p>Manage the {{ site_name }} instance from here.</p>
+        </section>
+
+        <div class="admin-workspace">
+          <aside class="admin-sidebar">
+            <p>Manage</p>
+            <nav class="admin-section-nav" aria-label="Admin sections" role="tablist" aria-orientation="vertical">
+              <button
+                id="admin-tab-services"
+                class="{% if active_section == 'services' %}active{% endif %}"
+                type="button"
+                role="tab"
+                aria-controls="services"
+                aria-selected="{{ 'true' if active_section == 'services' else 'false' }}"
+                tabindex="{{ 0 if active_section == 'services' else -1 }}"
+                data-admin-tab="services"
+              >Services</button>
+              <button
+                id="admin-tab-users"
+                class="{% if active_section == 'users' %}active{% endif %}"
+                type="button"
+                role="tab"
+                aria-controls="users"
+                aria-selected="{{ 'true' if active_section == 'users' else 'false' }}"
+                tabindex="{{ 0 if active_section == 'users' else -1 }}"
+                data-admin-tab="users"
+              >Users</button>
+              <button
+                id="admin-tab-appearance"
+                class="{% if active_section == 'appearance' %}active{% endif %}"
+                type="button"
+                role="tab"
+                aria-controls="appearance"
+                aria-selected="{{ 'true' if active_section == 'appearance' else 'false' }}"
+                tabindex="{{ 0 if active_section == 'appearance' else -1 }}"
+                data-admin-tab="appearance"
+              >Appearance</button>
+            </nav>
+          </aside>
+
+          <div class="admin-content">
+              <section
+                class="admin-panel services-panel"
+                id="services"
+                role="tabpanel"
+                aria-labelledby="admin-tab-services services-title"
+                data-admin-panel="services"
+                {% if active_section != 'services' %}hidden{% endif %}
+              >
+                <div class="panel-heading">
+                  <div>
+                    <p class="panel-kicker">Workspace</p>
+                    <h2 id="services-title">Services</h2>
+                  </div>
+                  <a class="secondary-link" href="/services">Open services</a>
+                </div>
+
+                <div class="services-empty">
+                  <span class="empty-index">01</span>
+                  <div>
+                    <h3>No services yet</h3>
+                    <p>Add your first vulnerable service to start building the challenge.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section
+                class="admin-panel users-panel"
+                id="users"
+                role="tabpanel"
+                aria-labelledby="admin-tab-users users-title"
+                data-admin-panel="users"
+                {% if active_section != 'users' %}hidden{% endif %}
+              >
+                <div class="panel-heading">
+                  <div>
+                    <p class="panel-kicker">Access</p>
+                    <h2 id="users-title">Users</h2>
+                  </div>
+                </div>
+
+                <div class="user-row">
+                  <span class="user-avatar" aria-hidden="true">{{ current_user.username[0] | upper }}</span>
+                  <div>
+                    <strong>{{ current_user.username }}</strong>
+                    <span>Administrator</span>
+                  </div>
+                </div>
+              </section>
+
+            <section
+              class="admin-panel appearance-panel"
+              id="appearance"
+              role="tabpanel"
+              aria-labelledby="admin-tab-appearance appearance-title"
+              data-admin-panel="appearance"
+              {% if active_section != 'appearance' %}hidden{% endif %}
+            >
+              <div class="panel-heading">
+                <div>
+                  <p class="panel-kicker">Interface</p>
+                  <h2 id="appearance-title">Appearance</h2>
+                </div>
+                {% if saved %}<span class="saved-label">Saved</span>{% endif %}
+              </div>
+
+              <form class="appearance-form" method="post" action="{{ url_for('update_appearance') }}">
+                <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+
+                <div class="settings-section">
+                  <h3>Branding</h3>
+
+                  <div class="field{% if errors.get('site_name') %} field--error{% endif %}">
+                    <label for="site-name">Platform title</label>
+                    <input
+                      id="site-name"
+                      name="site_name"
+                      type="text"
+                      value="{{ form_values.site_name }}"
+                      maxlength="120"
+                      required
+                    >
+                    {% if errors.get('site_name') %}<small>{{ errors.site_name }}</small>{% endif %}
+                  </div>
+
+                  <div class="compact-options">
+                    <label class="compact-check">
+                      <input name="change_title" type="checkbox"{% if form_values.change_title %} checked{% endif %}>
+                      <span>Change title</span>
+                    </label>
+                    <label class="compact-check">
+                      <input name="remove_standard_logo" type="checkbox"{% if form_values.remove_standard_logo %} checked{% endif %}>
+                      <span>Remove standard logo</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="settings-section palette-section">
+                  <div class="settings-title">
+                    <h3>Palette</h3>
+                    <span>HEX</span>
+                  </div>
+
+                  <div class="palette-fields">
+                    {% for name, field in palette_fields.items() %}
+                      <div class="palette-field{% if errors.get(name) %} palette-field--error{% endif %}">
+                        <label for="{{ name }}">{{ field.label }}</label>
+                        <div class="color-value">
+                          <span class="color-swatch" style="background: {{ palette_values[name] }}" aria-hidden="true"></span>
+                          <input
+                            id="{{ name }}"
+                            name="{{ name }}"
+                            type="text"
+                            value="{{ form_values[name] }}"
+                            maxlength="7"
+                            pattern="#[0-9A-Fa-f]{6}"
+                            spellcheck="false"
+                            required
+                          >
+                        </div>
+                        {% if errors.get(name) %}<small>{{ errors[name] }}</small>{% endif %}
+                      </div>
+                    {% endfor %}
+                  </div>
+                </div>
+
+                <button class="save-appearance" type="submit">Save appearance</button>
+              </form>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="{{ url_for('static', path='/admin.js') }}?v={{ static_version('admin.js') }}" defer></script>
+  </body>
+</html>

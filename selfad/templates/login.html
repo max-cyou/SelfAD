@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Sign in to the SelfAD admin panel.">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v={{ static_version('app.css') }}">
+  </head>
+  <body style="{{ palette_style }}">
+    <div class="page">
+      <header class="site-header">
+        <a class="logo" href="/" aria-label="SelfAD home">
+          {% if show_standard_logo %}
+            <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">
+          {% endif %}
+          <span class="logo-text">
+            {{ brand_title }}{% if brand_title == 'SelfAD' %}<b>.</b>{% endif %}
+          </span>
+        </a>
+
+        <nav aria-label="Main navigation">
+          <a href="/admin">Admin panel</a>
+          <a href="/services">Services</a>
+          <a href="/scoreboard">Scoreboard</a>
+        </nav>
+      </header>
+
+      <main class="auth-main">
+        <section class="auth-card" aria-labelledby="login-title">
+          <div class="auth-heading">
+            <h1 id="login-title">Admin sign in</h1>
+            <p>Use the administrator account created during setup.</p>
+          </div>
+
+          {% if error %}
+            <div class="auth-error" role="alert">{{ error }}</div>
+          {% endif %}
+
+          <form class="auth-form" method="post" action="{{ url_for('submit_login') }}">
+            <div class="field">
+              <label for="username">Username</label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                value="{{ username }}"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+                autofocus
+                required
+              >
+            </div>
+
+            <div class="field">
+              <label for="password">Password</label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                required
+              >
+            </div>
+
+            <button type="submit">Sign in</button>
+          </form>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

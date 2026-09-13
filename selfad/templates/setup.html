@@ -47,7 +47,7 @@
             </div>
           {% endif %}
 
-          <form method="post" action="{{ url_for('setup_page') }}">
+          <form class="setup-form" method="post" action="{{ url_for('setup_page') }}">
             <div class="field field--wide{% if errors.get('site_name') %} field--error{% endif %}">
               <label for="site-name">Platform name</label>
               <input

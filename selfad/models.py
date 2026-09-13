@@ -29,6 +29,25 @@ class BrandingSettings(Base):
     )
 
 
+class PaletteSettings(Base):
+    __tablename__ = "palette_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    page_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    surface_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    surface_subtle_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    text_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    text_soft_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    muted_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    border_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    border_hover_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    accent_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    accent_hover_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    accent_contrast_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    danger_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    danger_soft_color: Mapped[str] = mapped_column(String(7), nullable=False)
+
+
 class User(Base):
     __tablename__ = "users"
 
