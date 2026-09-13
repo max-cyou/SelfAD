@@ -167,8 +167,52 @@ form {
 }
 
 .field--wide,
+.setup-options,
 .form-actions {
   grid-column: 1 / -1;
+}
+
+.setup-options {
+  display: grid;
+  gap: 10px;
+  margin-top: -6px;
+}
+
+.check-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.check-option:hover {
+  border-color: var(--border-hover);
+}
+
+.check-option input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.check-option span {
+  display: grid;
+  gap: 2px;
+}
+
+.check-option strong {
+  color: #354052;
+  font-size: 13px;
+}
+
+.check-option small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .field label {
@@ -351,6 +395,7 @@ button:focus-visible {
   }
 
   .field--wide,
+  .setup-options,
   .form-actions {
     grid-column: auto;
   }

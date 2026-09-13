@@ -18,6 +18,17 @@ class InstanceConfig(Base):
     setup_complete: Mapped[bool] = mapped_column(default=False, nullable=False)
 
 
+class BrandingSettings(Base):
+    __tablename__ = "branding_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    change_title: Mapped[bool] = mapped_column(default=False, nullable=False)
+    remove_standard_logo: Mapped[bool] = mapped_column(
+        default=False,
+        nullable=False,
+    )
+
+
 class User(Base):
     __tablename__ = "users"
 

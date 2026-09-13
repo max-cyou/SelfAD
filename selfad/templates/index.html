@@ -5,14 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="SelfAD instance status.">
     <title>{{ title }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v={{ static_version('app.css') }}">
   </head>
   <body>
     <div class="page">
       <header class="site-header">
         <a class="logo" href="/" aria-label="SelfAD home">
-          <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}" alt="">
-          <span class="logo-text">SelfAD<b>.</b></span>
+          {% if show_standard_logo %}
+            <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">
+          {% endif %}
+          <span class="logo-text">
+            {{ brand_title }}{% if brand_title == 'SelfAD' %}<b>.</b>{% endif %}
+          </span>
         </a>
 
         <nav aria-label="Main navigation">

@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Configure your SelfAD instance.">
     <title>{{ title }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v={{ static_version('app.css') }}">
   </head>
   <body>
     <div class="page">
       <header class="site-header">
         <a class="logo" href="/" aria-label="SelfAD home">
-          <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}" alt="">
+          <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">
           <span class="logo-text">SelfAD<b>.</b></span>
         </a>
 
@@ -60,6 +60,32 @@
                 required
               >
               <small>{{ errors.get('site_name') or 'This name will be visible to all participants.' }}</small>
+            </div>
+
+            <div class="setup-options">
+              <label class="check-option">
+                <input
+                  name="change_title"
+                  type="checkbox"
+                  {% if change_title %}checked{% endif %}
+                >
+                <span>
+                  <strong>Change title</strong>
+                  <small>Use the platform name as the title. You can also do this later in the admin panel.</small>
+                </span>
+              </label>
+
+              <label class="check-option">
+                <input
+                  name="remove_standard_logo"
+                  type="checkbox"
+                  {% if remove_standard_logo %}checked{% endif %}
+                >
+                <span>
+                  <strong>Remove standard logo from title</strong>
+                  <small>Show the text title without the SelfAD mark.</small>
+                </span>
+              </label>
             </div>
 
             <div class="field{% if errors.get('admin_username') %} field--error{% endif %}">
