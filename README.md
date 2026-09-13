@@ -17,5 +17,7 @@ Open <http://localhost:8000>. Health check: <http://localhost:8000/health>.
 
 ```bash
 docker build -t selfad .
-docker run --rm -p 8000:8000 selfad
+docker run --rm -v selfad-data:/app/data -p 8000:8000 selfad
 ```
+
+The `selfad-data` volume keeps the instance database between container runs.

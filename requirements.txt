@@ -1,3 +1,4 @@
 fastapi
 jinja2
 uvicorn[standard]
+sqlalchemy>=2.0,<3.0
