@@ -1,14 +1,37 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="SelfAD instance status.">
     <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
   </head>
   <body>
-    <main>
-      <h1>{{ title }}</h1>
-      <p>Personal Attack–Defense platform.</p>
-    </main>
+    <div class="page">
+      <header class="site-header">
+        <a class="logo" href="/" aria-label="SelfAD home">
+          <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}" alt="">
+          <span class="logo-text">SelfAD<b>.</b></span>
+        </a>
+
+        <nav aria-label="Main navigation">
+          <a href="/admin">Admin panel</a>
+          <a href="/services">Services</a>
+          <a href="/scoreboard">Scoreboard</a>
+        </nav>
+      </header>
+
+      <main class="home-main">
+        <section class="ready-card" aria-labelledby="ready-title">
+          <h1 id="ready-title">SelfAD is ready to configure.</h1>
+          <p class="ready-copy">
+            Complete the initial setup to create an administrator account
+            and start adding vulnerable services.
+          </p>
+          <a class="primary-link" href="{{ url_for('setup_page') }}">Open configuration</a>
+        </section>
+      </main>
+    </div>
   </body>
 </html>

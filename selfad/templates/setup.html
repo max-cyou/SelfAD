@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Configure your SelfAD instance.">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+  </head>
+  <body>
+    <div class="page">
+      <header class="site-header">
+        <a class="logo" href="/" aria-label="SelfAD home">
+          <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}" alt="">
+          <span class="logo-text">SelfAD<b>.</b></span>
+        </a>
+
+        <nav aria-label="Main navigation">
+          <a href="/admin">Admin panel</a>
+          <a href="/services">Services</a>
+          <a href="/scoreboard">Scoreboard</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="intro" aria-labelledby="page-title">
+          <p class="eyebrow">First launch</p>
+          <h1 id="page-title">Set up your platform</h1>
+          <p>
+            Configure the instance and create the first administrator account.
+            You can change these settings later.
+          </p>
+        </section>
+
+        <section class="form-card" aria-labelledby="form-title">
+          <div class="form-heading">
+            <div>
+              <h2 id="form-title">Basic configuration</h2>
+              <p>All fields are required.</p>
+            </div>
+            <span>Step 1 of 1</span>
+          </div>
+
+          {% if errors %}
+            <div class="error-summary" role="alert">
+              Check the highlighted fields and try again.
+            </div>
+          {% endif %}
+
+          <form method="post" action="{{ url_for('setup_page') }}">
+            <div class="field field--wide{% if errors.get('site_name') %} field--error{% endif %}">
+              <label for="site-name">Platform name</label>
+              <input
+                id="site-name"
+                name="site_name"
+                type="text"
+                value="{{ site_name }}"
+                maxlength="120"
+                autocomplete="organization"
+                required
+              >
+              <small>{{ errors.get('site_name') or 'This name will be visible to all participants.' }}</small>
+            </div>
+
+            <div class="field{% if errors.get('admin_username') %} field--error{% endif %}">
+              <label for="admin-username">Admin username</label>
+              <input
+                id="admin-username"
+                name="admin_username"
+                type="text"
+                value="{{ admin_username }}"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+                required
+              >
+              {% if errors.get('admin_username') %}<small>{{ errors.get('admin_username') }}</small>{% endif %}
+            </div>
+
+            <div class="field{% if errors.get('admin_email') %} field--error{% endif %}">
+              <label for="admin-email">Admin email</label>
+              <input
+                id="admin-email"
+                name="admin_email"
+                type="email"
+                value="{{ admin_email }}"
+                autocomplete="email"
+                autocapitalize="none"
+                spellcheck="false"
+                required
+              >
+              {% if errors.get('admin_email') %}<small>{{ errors.get('admin_email') }}</small>{% endif %}
+            </div>
+
+            <div class="field{% if errors.get('admin_password') %} field--error{% endif %}">
+              <label for="admin-password">Password</label>
+              <input
+                id="admin-password"
+                name="admin_password"
+                type="password"
+                minlength="10"
+                autocomplete="new-password"
+                required
+              >
+              <small>{{ errors.get('admin_password') or 'Use at least 10 characters.' }}</small>
+            </div>
+
+            <div class="field{% if errors.get('admin_password_confirm') %} field--error{% endif %}">
+              <label for="admin-password-confirm">Confirm password</label>
+              <input
+                id="admin-password-confirm"
+                name="admin_password_confirm"
+                type="password"
+                minlength="10"
+                autocomplete="new-password"
+                required
+              >
+              {% if errors.get('admin_password_confirm') %}<small>{{ errors.get('admin_password_confirm') }}</small>{% endif %}
+            </div>
+
+            <div class="form-actions">
+              <button type="submit">Initialize SelfAD</button>
+            </div>
+          </form>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
