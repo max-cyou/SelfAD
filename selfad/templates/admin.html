@@ -32,9 +32,8 @@
 
       <main class="admin-main">
         <section class="admin-heading" aria-labelledby="admin-title">
-          <p class="eyebrow">Administration</p>
-          <h1 id="admin-title">Welcome, {{ current_user.username }}.</h1>
-          <p>Manage the {{ site_name }} instance from here.</p>
+          <h1 id="admin-title">Administration</h1>
+          <p>{{ site_name }}</p>
         </section>
 
         <div class="admin-workspace">
@@ -85,19 +84,125 @@
               >
                 <div class="panel-heading">
                   <div>
-                    <p class="panel-kicker">Workspace</p>
                     <h2 id="services-title">Services</h2>
+                    <p>Local GitLab repositories available to participants.</p>
                   </div>
-                  <a class="secondary-link" href="/services">Open services</a>
                 </div>
 
-                <div class="services-empty">
-                  <span class="empty-index">01</span>
-                  <div>
-                    <h3>No services yet</h3>
-                    <p>Add your first vulnerable service to start building the challenge.</p>
+                <form
+                  class="service-form"
+                  method="post"
+                  action="{% if service_edit_id %}{{ url_for('update_service', service_id=service_edit_id) }}{% else %}{{ url_for('create_service') }}{% endif %}"
+                  data-service-form
+                  data-create-action="{{ url_for('create_service') }}"
+                >
+                  <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+
+                  <div class="service-form-heading">
+                    <h3 data-service-form-title>{% if service_edit_id %}Edit service{% else %}Add service{% endif %}</h3>
+                    <button type="button" data-service-cancel{% if not service_edit_id %} hidden{% endif %}>Cancel edit</button>
                   </div>
-                </div>
+
+                  {% if service_errors.get('_form') %}
+                    <p class="inline-error" role="alert">{{ service_errors['_form'] }}</p>
+                  {% endif %}
+
+                  <div class="service-fields">
+                    <div class="field{% if service_errors.get('name') %} field--error{% endif %}">
+                      <label for="service-name">Name</label>
+                      <input id="service-name" name="name" type="text" value="{{ service_form.name }}" maxlength="120" required>
+                      {% if service_errors.get('name') %}<small>{{ service_errors.name }}</small>{% endif %}
+                    </div>
+
+                    <div class="field{% if service_errors.get('slug') %} field--error{% endif %}">
+                      <label for="service-slug">Slug</label>
+                      <input id="service-slug" name="slug" type="text" value="{{ service_form.slug }}" maxlength="64" placeholder="notes-service" spellcheck="false" required>
+                      {% if service_errors.get('slug') %}<small>{{ service_errors.slug }}</small>{% endif %}
+                    </div>
+
+                    <div class="field service-field--wide{% if service_errors.get('gitlab_project_path') %} field--error{% endif %}">
+                      <label for="gitlab-project-path">GitLab project</label>
+                      <input id="gitlab-project-path" name="gitlab_project_path" type="text" value="{{ service_form.gitlab_project_path }}" maxlength="255" placeholder="selfad/services/notes" spellcheck="false" required>
+                      <small>{{ service_errors.get('gitlab_project_path') or 'Namespace and project path, without the GitLab host.' }}</small>
+                    </div>
+
+                    <div class="field{% if service_errors.get('default_branch') %} field--error{% endif %}">
+                      <label for="default-branch">Default branch</label>
+                      <input id="default-branch" name="default_branch" type="text" value="{{ service_form.default_branch }}" maxlength="255" spellcheck="false" required>
+                      {% if service_errors.get('default_branch') %}<small>{{ service_errors.default_branch }}</small>{% endif %}
+                    </div>
+
+                    <div class="field{% if service_errors.get('status') %} field--error{% endif %}">
+                      <label for="service-status">Status</label>
+                      <select id="service-status" name="status" required>
+                        <option value="draft"{% if service_form.status == 'draft' %} selected{% endif %}>Draft</option>
+                        <option value="active"{% if service_form.status == 'active' %} selected{% endif %}>Active</option>
+                      </select>
+                      {% if service_errors.get('status') %}<small>{{ service_errors.status }}</small>{% endif %}
+                    </div>
+
+                    <div class="field service-field--wide{% if service_errors.get('description') %} field--error{% endif %}">
+                      <label for="service-description">Description</label>
+                      <textarea id="service-description" name="description" maxlength="4000" rows="3">{{ service_form.description }}</textarea>
+                      {% if service_errors.get('description') %}<small>{{ service_errors.description }}</small>{% endif %}
+                    </div>
+                  </div>
+
+                  <div class="service-form-actions">
+                    <button type="submit" data-service-submit>{% if service_edit_id %}Save changes{% else %}Add service{% endif %}</button>
+                  </div>
+                </form>
+
+                {% if services %}
+                  <div class="service-table-wrap">
+                    <table class="service-table">
+                      <thead>
+                        <tr>
+                          <th>Service</th>
+                          <th>GitLab project</th>
+                          <th>Status</th>
+                          <th><span class="visually-hidden">Actions</span></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for service in services %}
+                          <tr>
+                            <td>
+                              <strong>{{ service.name }}</strong>
+                              <small>{{ service.slug }}</small>
+                            </td>
+                            <td>
+                              <code>{{ service.gitlab_project_path }}</code>
+                              <small>{{ service.default_branch }}</small>
+                            </td>
+                            <td><span class="service-status service-status--{{ service.status.value }}">{{ service.status.value }}</span></td>
+                            <td class="service-actions">
+                              <button
+                                type="button"
+                                data-service-edit
+                                data-update-action="{{ url_for('update_service', service_id=service.id) }}"
+                                data-name="{{ service.name }}"
+                                data-slug="{{ service.slug }}"
+                                data-project-path="{{ service.gitlab_project_path }}"
+                                data-default-branch="{{ service.default_branch }}"
+                                data-status="{{ service.status.value }}"
+                                data-description="{{ service.description }}"
+                              >Edit</button>
+                              <form method="post" action="{{ url_for('delete_service', service_id=service.id) }}" data-delete-service="{{ service.name }}">
+                                <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+                                <button type="submit">Delete</button>
+                              </form>
+                            </td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                {% else %}
+                  <div class="services-empty">
+                    <p>No services have been added.</p>
+                  </div>
+                {% endif %}
               </section>
 
               <section
@@ -110,8 +215,8 @@
               >
                 <div class="panel-heading">
                   <div>
-                    <p class="panel-kicker">Access</p>
                     <h2 id="users-title">Users</h2>
+                    <p>Accounts with access to this instance.</p>
                   </div>
                 </div>
 
@@ -134,8 +239,8 @@
             >
               <div class="panel-heading">
                 <div>
-                  <p class="panel-kicker">Interface</p>
                   <h2 id="appearance-title">Appearance</h2>
+                  <p>Platform title, logo and interface colors.</p>
                 </div>
                 {% if saved %}<span class="saved-label">Saved</span>{% endif %}
               </div>

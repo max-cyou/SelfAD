@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
+from enum import Enum
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, Enum as SqlEnum, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from selfad.database import Base
@@ -46,6 +47,66 @@ class PaletteSettings(Base):
     accent_contrast_color: Mapped[str] = mapped_column(String(7), nullable=False)
     danger_color: Mapped[str] = mapped_column(String(7), nullable=False)
     danger_soft_color: Mapped[str] = mapped_column(String(7), nullable=False)
+
+
+class ServiceStatus(str, Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+
+
+class Service(Base):
+    __tablename__ = "services"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    slug: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    gitlab_project_id: Mapped[int | None] = mapped_column(
+        unique=True,
+        nullable=True,
+    )
+    gitlab_project_path: Mapped[str] = mapped_column(
+        String(255),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+    default_branch: Mapped[str] = mapped_column(
+        String(255),
+        default="main",
+        nullable=False,
+    )
+    status: Mapped[ServiceStatus] = mapped_column(
+        SqlEnum(
+            ServiceStatus,
+            name="service_status",
+            native_enum=False,
+            validate_strings=True,
+            values_callable=lambda enum_class: [
+                item.value for item in enum_class
+            ],
+            create_constraint=True,
+        ),
+        default=ServiceStatus.DRAFT,
+        index=True,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
 
 
 class User(Base):
