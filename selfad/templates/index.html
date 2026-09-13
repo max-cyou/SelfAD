@@ -24,12 +24,21 @@
 
       <main class="home-main">
         <section class="ready-card" aria-labelledby="ready-title">
-          <h1 id="ready-title">SelfAD is ready to configure.</h1>
-          <p class="ready-copy">
-            Complete the initial setup to create an administrator account
-            and start adding vulnerable services.
-          </p>
-          <a class="primary-link" href="{{ url_for('setup_page') }}">Open configuration</a>
+          {% if is_configured %}
+            <h1 id="ready-title">{{ site_name }} is configured.</h1>
+            <p class="ready-copy">
+              Your instance is running. Continue in the admin panel
+              to add the first vulnerable service.
+            </p>
+            <a class="primary-link" href="/admin">Open admin panel</a>
+          {% else %}
+            <h1 id="ready-title">SelfAD is ready to configure.</h1>
+            <p class="ready-copy">
+              Complete the initial setup to create an administrator account
+              and start adding vulnerable services.
+            </p>
+            <a class="primary-link" href="{{ url_for('setup_page') }}">Open configuration</a>
+          {% endif %}
         </section>
       </main>
     </div>

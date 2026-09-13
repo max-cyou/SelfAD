@@ -2,3 +2,4 @@ fastapi
 jinja2
 uvicorn[standard]
 sqlalchemy>=2.0,<3.0
+python-multipart>=0.0.20,<1.0
