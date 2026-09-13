@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --create-home --uid 10001 appuser
 
 COPY main.py .
-COPY templates ./templates
+COPY selfad ./selfad
 
 USER appuser
 
