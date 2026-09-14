@@ -82,108 +82,39 @@
                 data-admin-panel="services"
                 {% if active_section != 'services' %}hidden{% endif %}
               >
-                <div class="panel-heading">
-                  <div>
-                    <h2 id="services-title">Services</h2>
-                    <p>Local GitLab repositories available to participants.</p>
-                  </div>
-                </div>
-
-                <form
-                  class="service-form"
-                  method="post"
-                  action="{% if service_edit_id %}{{ url_for('update_service', service_id=service_edit_id) }}{% else %}{{ url_for('create_service') }}{% endif %}"
-                  data-service-form
-                  data-create-action="{{ url_for('create_service') }}"
-                >
-                  <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
-
-                  <div class="service-form-heading">
-                    <h3 data-service-form-title>{% if service_edit_id %}Edit service{% else %}Add service{% endif %}</h3>
-                    <button type="button" data-service-cancel{% if not service_edit_id %} hidden{% endif %}>Cancel edit</button>
-                  </div>
-
-                  {% if service_errors.get('_form') %}
-                    <p class="inline-error" role="alert">{{ service_errors['_form'] }}</p>
-                  {% endif %}
-
-                  <div class="service-fields">
-                    <div class="field{% if service_errors.get('name') %} field--error{% endif %}">
-                      <label for="service-name">Name</label>
-                      <input id="service-name" name="name" type="text" value="{{ service_form.name }}" maxlength="120" required>
-                      {% if service_errors.get('name') %}<small>{{ service_errors.name }}</small>{% endif %}
+                <section class="service-block service-list-block" aria-labelledby="services-title">
+                  <div class="panel-heading services-list-heading">
+                    <div>
+                      <h2 id="services-title">Service repositories</h2>
+                      <p>{{ services | length }} configured service{% if services | length != 1 %}s{% endif %}.</p>
                     </div>
-
-                    <div class="field{% if service_errors.get('slug') %} field--error{% endif %}">
-                      <label for="service-slug">Slug</label>
-                      <input id="service-slug" name="slug" type="text" value="{{ service_form.slug }}" maxlength="64" placeholder="notes-service" spellcheck="false" required>
-                      {% if service_errors.get('slug') %}<small>{{ service_errors.slug }}</small>{% endif %}
-                    </div>
-
-                    <div class="field service-field--wide{% if service_errors.get('gitlab_project_path') %} field--error{% endif %}">
-                      <label for="gitlab-project-path">GitLab project</label>
-                      <input id="gitlab-project-path" name="gitlab_project_path" type="text" value="{{ service_form.gitlab_project_path }}" maxlength="255" placeholder="selfad/services/notes" spellcheck="false" required>
-                      <small>{{ service_errors.get('gitlab_project_path') or 'Namespace and project path, without the GitLab host.' }}</small>
-                    </div>
-
-                    <div class="field{% if service_errors.get('default_branch') %} field--error{% endif %}">
-                      <label for="default-branch">Default branch</label>
-                      <input id="default-branch" name="default_branch" type="text" value="{{ service_form.default_branch }}" maxlength="255" spellcheck="false" required>
-                      {% if service_errors.get('default_branch') %}<small>{{ service_errors.default_branch }}</small>{% endif %}
-                    </div>
-
-                    <div class="field{% if service_errors.get('status') %} field--error{% endif %}">
-                      <label for="service-status">Status</label>
-                      <select id="service-status" name="status" required>
-                        <option value="draft"{% if service_form.status == 'draft' %} selected{% endif %}>Draft</option>
-                        <option value="active"{% if service_form.status == 'active' %} selected{% endif %}>Active</option>
-                      </select>
-                      {% if service_errors.get('status') %}<small>{{ service_errors.status }}</small>{% endif %}
-                    </div>
-
-                    <div class="field service-field--wide{% if service_errors.get('description') %} field--error{% endif %}">
-                      <label for="service-description">Description</label>
-                      <textarea id="service-description" name="description" maxlength="4000" rows="3">{{ service_form.description }}</textarea>
-                      {% if service_errors.get('description') %}<small>{{ service_errors.description }}</small>{% endif %}
+                    <div class="services-heading-actions">
+                      <span class="git-state{% if gitea_configured %} git-state--ready{% endif %}">
+                        {% if gitea_configured %}Gitea connected{% else %}Gitea unavailable{% endif %}
+                      </span>
+                      <a href="#service-editor" data-new-service>New service</a>
                     </div>
                   </div>
 
-                  <div class="service-form-actions">
-                    <button type="submit" data-service-submit>{% if service_edit_id %}Save changes{% else %}Add service{% endif %}</button>
-                  </div>
-                </form>
-
-                {% if services %}
-                  <div class="service-table-wrap">
-                    <table class="service-table">
-                      <thead>
-                        <tr>
-                          <th>Service</th>
-                          <th>GitLab project</th>
-                          <th>Status</th>
-                          <th><span class="visually-hidden">Actions</span></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {% for service in services %}
-                          <tr>
-                            <td>
-                              <strong>{{ service.name }}</strong>
-                              <small>{{ service.slug }}</small>
-                            </td>
-                            <td>
-                              <code>{{ service.gitlab_project_path }}</code>
-                              <small>{{ service.default_branch }}</small>
-                            </td>
-                            <td><span class="service-status service-status--{{ service.status.value }}">{{ service.status.value }}</span></td>
-                            <td class="service-actions">
+                  {% if services %}
+                    <div class="service-list">
+                      {% for service in services %}
+                        <article class="service-row">
+                          <header class="service-row-header">
+                            <div class="service-identity">
+                              <div>
+                                <h3>{{ service.name }}</h3>
+                                <code>{{ service.slug }}</code>
+                              </div>
+                              <span class="service-status service-status--{{ service.status.value }}">{{ service.status.value }}</span>
+                            </div>
+                            <div class="service-actions">
                               <button
                                 type="button"
                                 data-service-edit
                                 data-update-action="{{ url_for('update_service', service_id=service.id) }}"
                                 data-name="{{ service.name }}"
                                 data-slug="{{ service.slug }}"
-                                data-project-path="{{ service.gitlab_project_path }}"
                                 data-default-branch="{{ service.default_branch }}"
                                 data-status="{{ service.status.value }}"
                                 data-description="{{ service.description }}"
@@ -192,17 +123,109 @@
                                 <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
                                 <button type="submit">Delete</button>
                               </form>
-                            </td>
-                          </tr>
-                        {% endfor %}
-                      </tbody>
-                    </table>
+                            </div>
+                          </header>
+
+                          <div class="repository-list">
+                            <a class="repository-link" href="{{ gitea_public_url }}/{{ service.repository_path }}" target="_blank" rel="noopener noreferrer">
+                              <span class="repository-label">Service repository</span>
+                              <code>{{ service.repository_path }}</code>
+                              <span class="repository-open">Open in Gitea <span aria-hidden="true">↗</span></span>
+                            </a>
+                            {% if service.jury_repository_path %}
+                              <a class="repository-link" href="{{ gitea_public_url }}/{{ service.jury_repository_path }}" target="_blank" rel="noopener noreferrer">
+                                <span class="repository-label">Jury repository</span>
+                                <code>{{ service.jury_repository_path }}</code>
+                                <span class="repository-open">Open in Gitea <span aria-hidden="true">↗</span></span>
+                              </a>
+                            {% endif %}
+                          </div>
+
+                          <footer class="service-row-footer">
+                            <span>Default branch</span>
+                            <code>{{ service.default_branch }}</code>
+                          </footer>
+                        </article>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <div class="services-empty">
+                      <p>No service repositories yet.</p>
+                      <a href="#service-editor" data-new-service>Create the first service</a>
+                    </div>
+                  {% endif %}
+                </section>
+
+                <section class="service-block service-editor-block" id="service-editor" aria-labelledby="service-editor-title">
+                  <div class="panel-heading">
+                    <div>
+                      <h2 id="service-editor-title" data-service-form-title>{% if service_edit_id %}Edit service{% else %}Create service{% endif %}</h2>
+                      <p data-service-form-description>{% if service_edit_id %}Update service metadata and availability.{% else %}Creates separate service and jury repositories in Gitea.{% endif %}</p>
+                    </div>
+                    <button class="service-cancel" type="button" data-service-cancel{% if not service_edit_id %} hidden{% endif %}>Cancel edit</button>
                   </div>
-                {% else %}
-                  <div class="services-empty">
-                    <p>No services have been added.</p>
-                  </div>
-                {% endif %}
+
+                  <form
+                    class="service-form"
+                    method="post"
+                    action="{% if service_edit_id %}{{ url_for('update_service', service_id=service_edit_id) }}{% else %}{{ url_for('create_service') }}{% endif %}"
+                    data-service-form
+                    data-create-action="{{ url_for('create_service') }}"
+                  >
+                    <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+
+                    {% if service_errors.get('_form') %}
+                      <p class="inline-error" role="alert">{{ service_errors['_form'] }}</p>
+                    {% endif %}
+
+                    <div class="service-fields">
+                      <div class="field{% if service_errors.get('name') %} field--error{% endif %}">
+                        <label for="service-name">Name</label>
+                        <input id="service-name" name="name" type="text" value="{{ service_form.name }}" maxlength="120" required>
+                        {% if service_errors.get('name') %}<small>{{ service_errors.name }}</small>{% endif %}
+                      </div>
+
+                      <div class="field{% if service_errors.get('slug') %} field--error{% endif %}">
+                        <label for="service-slug">Slug</label>
+                        <input id="service-slug" name="slug" type="text" value="{{ service_form.slug }}" maxlength="64" placeholder="notes-service" spellcheck="false"{% if service_edit_id %} readonly{% endif %} required>
+                        <small>{{ service_errors.get('slug') or 'Used in both repository paths.' }}</small>
+                      </div>
+
+                      {% if ssh_key_required %}
+                        <div class="field service-field--wide{% if service_errors.get('ssh_public_key') %} field--error{% endif %}">
+                          <label for="ssh-public-key">Administrator SSH public key</label>
+                          <textarea id="ssh-public-key" name="ssh_public_key" maxlength="2048" rows="2" placeholder="ssh-ed25519 AAAA..." spellcheck="false">{{ service_form.ssh_public_key }}</textarea>
+                          <small>{{ service_errors.get('ssh_public_key') or 'Only the public key. The private key never leaves your machine.' }}</small>
+                        </div>
+                      {% endif %}
+
+                      <div class="field{% if service_errors.get('default_branch') %} field--error{% endif %}">
+                        <label for="default-branch">Default branch</label>
+                        <input id="default-branch" name="default_branch" type="text" value="{{ service_form.default_branch }}" maxlength="255" spellcheck="false"{% if service_edit_id %} readonly{% endif %} required>
+                        {% if service_errors.get('default_branch') %}<small>{{ service_errors.default_branch }}</small>{% endif %}
+                      </div>
+
+                      <div class="field{% if service_errors.get('status') %} field--error{% endif %}">
+                        <label for="service-status">Status</label>
+                        <select id="service-status" name="status" required>
+                          <option value="draft"{% if service_form.status == 'draft' %} selected{% endif %}>Draft</option>
+                          <option value="active" data-active-status{% if service_form.status == 'active' %} selected{% endif %}{% if not service_edit_id %} disabled{% endif %}>Active</option>
+                        </select>
+                        <small>{{ service_errors.get('status') or 'Activation requires both repositories and a service Dockerfile.' }}</small>
+                      </div>
+
+                      <div class="field service-field--wide{% if service_errors.get('description') %} field--error{% endif %}">
+                        <label for="service-description">Description</label>
+                        <textarea id="service-description" name="description" maxlength="4000" rows="3">{{ service_form.description }}</textarea>
+                        {% if service_errors.get('description') %}<small>{{ service_errors.description }}</small>{% endif %}
+                      </div>
+                    </div>
+
+                    <div class="service-form-actions">
+                      <button type="submit" data-service-submit>{% if service_edit_id %}Save changes{% else %}Create repositories{% endif %}</button>
+                    </div>
+                  </form>
+                </section>
               </section>
 
               <section
@@ -227,6 +250,36 @@
                     <span>Administrator</span>
                   </div>
                 </div>
+
+                <section class="gitea-credentials" aria-labelledby="gitea-credentials-title">
+                  <div class="gitea-credentials-heading">
+                    <div>
+                      <h3 id="gitea-credentials-title">Gitea administrator</h3>
+                      <p>Credentials for the local Git server.</p>
+                    </div>
+                    <a href="{{ gitea_public_url }}" target="_blank" rel="noopener noreferrer">Open Gitea <span aria-hidden="true">↗</span></a>
+                  </div>
+
+                  <dl class="credential-list">
+                    <div>
+                      <dt>Username</dt>
+                      <dd><code>root</code></dd>
+                    </div>
+                    <div>
+                      <dt>Password</dt>
+                      <dd class="credential-password">
+                        <code data-gitea-password>••••••••••••••••</code>
+                        <button
+                          type="button"
+                          data-gitea-password-reveal
+                          data-credentials-url="{{ url_for('gitea_credentials') }}"
+                        >Show</button>
+                        <button type="button" data-gitea-password-copy hidden>Copy</button>
+                      </dd>
+                    </div>
+                  </dl>
+                  <p class="credential-status" data-gitea-credential-status aria-live="polite"></p>
+                </section>
               </section>
 
             <section

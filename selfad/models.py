@@ -66,15 +66,24 @@ class Service(Base):
         nullable=False,
     )
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    gitlab_project_id: Mapped[int | None] = mapped_column(
+    repository_id: Mapped[int | None] = mapped_column(
         unique=True,
         nullable=True,
     )
-    gitlab_project_path: Mapped[str] = mapped_column(
+    repository_path: Mapped[str] = mapped_column(
         String(255),
         unique=True,
         index=True,
         nullable=False,
+    )
+    jury_repository_id: Mapped[int | None] = mapped_column(
+        unique=True,
+        nullable=True,
+    )
+    jury_repository_path: Mapped[str | None] = mapped_column(
+        String(255),
+        unique=True,
+        nullable=True,
     )
     default_branch: Mapped[str] = mapped_column(
         String(255),
@@ -127,6 +136,14 @@ class User(Base):
     )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_admin: Mapped[bool] = mapped_column(default=False, nullable=False)
+    ssh_public_key: Mapped[str | None] = mapped_column(
+        String(2048),
+        nullable=True,
+    )
+    git_ssh_key_id: Mapped[int | None] = mapped_column(
+        unique=True,
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

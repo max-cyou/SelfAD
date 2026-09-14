@@ -58,8 +58,31 @@
 
   const serviceForm = document.querySelector("[data-service-form]");
   const serviceFormTitle = document.querySelector("[data-service-form-title]");
+  const serviceFormDescription = document.querySelector(
+    "[data-service-form-description]",
+  );
   const serviceSubmit = document.querySelector("[data-service-submit]");
   const serviceCancel = document.querySelector("[data-service-cancel]");
+  const serviceEditor = document.querySelector("#service-editor");
+
+  const resetServiceForm = () => {
+    if (!serviceForm) return;
+
+    serviceForm.action = serviceForm.dataset.createAction;
+    serviceForm.elements.namedItem("name").value = "";
+    serviceForm.elements.namedItem("slug").value = "";
+    serviceForm.elements.namedItem("slug").readOnly = false;
+    serviceForm.elements.namedItem("default_branch").value = "main";
+    serviceForm.elements.namedItem("default_branch").readOnly = false;
+    serviceForm.elements.namedItem("status").value = "draft";
+    serviceForm.querySelector("[data-active-status]").disabled = true;
+    serviceForm.elements.namedItem("description").value = "";
+    serviceFormTitle.textContent = "Create service";
+    serviceFormDescription.textContent =
+      "Creates separate service and jury repositories in Gitea.";
+    serviceSubmit.textContent = "Create repositories";
+    serviceCancel.hidden = true;
+  };
 
   document.querySelectorAll("[data-service-edit]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -68,32 +91,111 @@
       serviceForm.action = button.dataset.updateAction;
       serviceForm.elements.namedItem("name").value = button.dataset.name;
       serviceForm.elements.namedItem("slug").value = button.dataset.slug;
-      serviceForm.elements.namedItem("gitlab_project_path").value =
-        button.dataset.projectPath;
+      serviceForm.elements.namedItem("slug").readOnly = true;
       serviceForm.elements.namedItem("default_branch").value =
         button.dataset.defaultBranch;
+      serviceForm.elements.namedItem("default_branch").readOnly = true;
       serviceForm.elements.namedItem("status").value = button.dataset.status;
+      serviceForm.querySelector("[data-active-status]").disabled = false;
       serviceForm.elements.namedItem("description").value =
         button.dataset.description;
       serviceFormTitle.textContent = "Edit service";
+      serviceFormDescription.textContent =
+        "Update service metadata and availability.";
       serviceSubmit.textContent = "Save changes";
       serviceCancel.hidden = false;
+      serviceEditor.scrollIntoView({ block: "start" });
       serviceForm.elements.namedItem("name").focus();
     });
   });
 
   if (serviceCancel && serviceForm) {
     serviceCancel.addEventListener("click", () => {
-      serviceForm.action = serviceForm.dataset.createAction;
-      serviceForm.elements.namedItem("name").value = "";
-      serviceForm.elements.namedItem("slug").value = "";
-      serviceForm.elements.namedItem("gitlab_project_path").value = "";
-      serviceForm.elements.namedItem("default_branch").value = "main";
-      serviceForm.elements.namedItem("status").value = "draft";
-      serviceForm.elements.namedItem("description").value = "";
-      serviceFormTitle.textContent = "Add service";
-      serviceSubmit.textContent = "Add service";
-      serviceCancel.hidden = true;
+      resetServiceForm();
+      serviceForm.elements.namedItem("name").focus();
+    });
+  }
+
+  document.querySelectorAll("[data-new-service]").forEach((link) => {
+    link.addEventListener("click", () => {
+      resetServiceForm();
+      window.setTimeout(() => {
+        serviceForm?.elements.namedItem("name").focus();
+      }, 0);
+    });
+  });
+
+  const passwordOutput = document.querySelector("[data-gitea-password]");
+  const passwordReveal = document.querySelector(
+    "[data-gitea-password-reveal]",
+  );
+  const passwordCopy = document.querySelector("[data-gitea-password-copy]");
+  const credentialStatus = document.querySelector(
+    "[data-gitea-credential-status]",
+  );
+  let giteaPassword = null;
+
+  if (passwordReveal && passwordOutput) {
+    passwordReveal.addEventListener("click", async () => {
+      if (passwordReveal.dataset.visible === "true") {
+        passwordOutput.textContent = "••••••••••••••••";
+        passwordReveal.textContent = "Show";
+        passwordReveal.dataset.visible = "false";
+        credentialStatus.textContent = "";
+        return;
+      }
+
+      passwordReveal.disabled = true;
+      credentialStatus.classList.remove("credential-status--error");
+      credentialStatus.textContent = "Loading…";
+
+      try {
+        if (!giteaPassword) {
+          const csrfToken = document.querySelector(
+            'input[name="csrf_token"]',
+          )?.value;
+          const body = new URLSearchParams({ csrf_token: csrfToken || "" });
+          const response = await fetch(passwordReveal.dataset.credentialsUrl, {
+            method: "POST",
+            body,
+            credentials: "same-origin",
+          });
+          if (!response.ok) {
+            throw new Error("Password is unavailable.");
+          }
+          const credentials = await response.json();
+          if (typeof credentials.password !== "string") {
+            throw new Error("Password is unavailable.");
+          }
+          giteaPassword = credentials.password;
+        }
+
+        passwordOutput.textContent = giteaPassword;
+        passwordReveal.textContent = "Hide";
+        passwordReveal.dataset.visible = "true";
+        passwordCopy.hidden = false;
+        credentialStatus.textContent = "";
+      } catch (error) {
+        credentialStatus.classList.add("credential-status--error");
+        credentialStatus.textContent = error.message;
+      } finally {
+        passwordReveal.disabled = false;
+      }
+    });
+  }
+
+  if (passwordCopy) {
+    passwordCopy.addEventListener("click", async () => {
+      if (!giteaPassword) return;
+
+      try {
+        await navigator.clipboard.writeText(giteaPassword);
+        credentialStatus.classList.remove("credential-status--error");
+        credentialStatus.textContent = "Copied.";
+      } catch {
+        credentialStatus.classList.add("credential-status--error");
+        credentialStatus.textContent = "Could not copy the password.";
+      }
     });
   }
 

@@ -1,10 +1,24 @@
 import os
 import secrets
+from dataclasses import dataclass
+from pathlib import Path
 
 from selfad.database import DATA_DIR
 
 
 SESSION_SECRET_PATH = DATA_DIR / "session.secret"
+
+
+@dataclass(frozen=True)
+class GiteaSettings:
+    internal_url: str
+    public_url: str
+    private_token: str | None
+    verify_tls: bool
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.private_token)
 
 
 def get_session_secret() -> str:
@@ -39,6 +53,42 @@ def get_session_secret() -> str:
 def use_secure_cookies() -> bool:
     value = os.getenv("SELFAD_SECURE_COOKIES", "false")
     return value.lower() in {"1", "true", "yes", "on"}
+
+
+def get_gitea_settings() -> GiteaSettings:
+    internal_url = os.getenv(
+        "SELFAD_GITEA_INTERNAL_URL",
+        "http://127.0.0.1:8929",
+    )
+    public_url = os.getenv("SELFAD_GITEA_PUBLIC_URL", internal_url)
+    private_token = os.getenv("SELFAD_GITEA_TOKEN", "").strip() or None
+    token_file = os.getenv("SELFAD_GITEA_TOKEN_FILE", "").strip()
+    if private_token is None and token_file:
+        try:
+            private_token = (
+                Path(token_file).read_text(encoding="utf-8").strip() or None
+            )
+        except FileNotFoundError:
+            pass
+    verify_tls = os.getenv("SELFAD_GITEA_VERIFY_TLS", "true").lower()
+
+    return GiteaSettings(
+        internal_url=internal_url.rstrip("/"),
+        public_url=public_url.rstrip("/"),
+        private_token=private_token,
+        verify_tls=verify_tls not in {"0", "false", "no", "off"},
+    )
+
+
+def get_gitea_root_password() -> str | None:
+    password_file = os.getenv(
+        "SELFAD_GITEA_PASSWORD_FILE",
+        "/data/selfad/secrets/gitea_admin_password",
+    )
+    try:
+        return Path(password_file).read_text(encoding="utf-8").strip() or None
+    except (FileNotFoundError, PermissionError):
+        return None
 
 
 def _read_session_secret() -> str:

@@ -1,0 +1,79 @@
+#!/bin/bash
+
+exec 2>&1
+set -euo pipefail
+
+export SELFAD_DATA_DIR="${SELFAD_DATA_DIR:-/data/selfad/data}"
+export SELFAD_GITEA_INTERNAL_URL="${SELFAD_GITEA_INTERNAL_URL:-http://127.0.0.1:8929}"
+export SELFAD_GITEA_PUBLIC_URL="${SELFAD_GITEA_PUBLIC_URL:-http://localhost:8929}"
+export SELFAD_GITEA_TOKEN_FILE="${SELFAD_GITEA_TOKEN_FILE:-${SELFAD_DATA_DIR}/gitea_token}"
+export SELFAD_GITEA_VERIFY_TLS="${SELFAD_GITEA_VERIFY_TLS:-false}"
+
+readonly gitea_url="${SELFAD_GITEA_INTERNAL_URL}"
+readonly token_file="${SELFAD_GITEA_TOKEN_FILE}"
+readonly config_file="/data/gitea/conf/app.ini"
+readonly password_file="/data/selfad/secrets/gitea_admin_password"
+
+cd /app
+
+attempt=0
+until curl --fail --silent "${gitea_url}/api/healthz" >/dev/null; do
+    attempt=$((attempt + 1))
+    if (( attempt % 12 == 1 )); then
+        echo "Waiting for the local Gitea instance..."
+    fi
+    sleep 5
+done
+
+token_is_valid=false
+if [[ -s "${token_file}" ]]; then
+    current_token=$(<"${token_file}")
+    if curl \
+        --fail \
+        --silent \
+        --header "Authorization: token ${current_token}" \
+        "${gitea_url}/api/v1/user" \
+        >/dev/null; then
+        token_is_valid=true
+    fi
+fi
+
+if [[ "${token_is_valid}" != true ]]; then
+    if ! su-exec git:git /usr/local/bin/gitea \
+        --config "${config_file}" \
+        admin user list \
+        | awk '$2 == "root" { found = 1 } END { exit !found }'; then
+        admin_password=$(<"${password_file}")
+        su-exec git:git /usr/local/bin/gitea \
+            --config "${config_file}" \
+            admin user create \
+            --username root \
+            --password "${admin_password}" \
+            --email root@localhost \
+            --admin \
+            --must-change-password=false
+        unset admin_password
+    fi
+
+    current_token=$(su-exec git:git /usr/local/bin/gitea \
+        --config "${config_file}" \
+        admin user generate-access-token \
+        --username root \
+        --token-name "selfad-internal-$(date +%s)" \
+        --scopes all \
+        --raw)
+
+    umask 077
+    temporary_token_file="${token_file}.new"
+    printf '%s' "${current_token}" > "${temporary_token_file}"
+    chown selfad:selfad "${temporary_token_file}"
+    chmod 0400 "${temporary_token_file}"
+    mv -f "${temporary_token_file}" "${token_file}"
+fi
+
+echo "Local Gitea API access configured. Starting SelfAD."
+exec su-exec selfad:selfad \
+    /opt/selfad/venv/bin/uvicorn \
+    main:app \
+    --host 0.0.0.0 \
+    --port "${SELFAD_PORT:-8000}"
