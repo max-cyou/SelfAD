@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="SelfAD scoreboard.">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v={{ static_version('app.css') }}">
+  </head>
+  <body style="{{ palette_style }}">
+    <div class="page page--participant">
+      <header class="site-header">
+        <a class="logo" href="/" aria-label="SelfAD home">
+          {% if show_standard_logo %}<img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">{% endif %}
+          <span class="logo-text">{{ brand_title }}</span>
+        </a>
+        <nav aria-label="Main navigation">
+          {% if current_user and current_user.is_admin %}<a href="/admin">Admin panel</a>{% endif %}
+          {% if current_user %}<a href="/services">Services</a>{% endif %}
+          <a class="active" href="/scoreboard">Scoreboard</a>
+          {% if current_user %}<form class="logout-form" method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Sign out</button></form>{% else %}<a href="/login">Sign in</a>{% endif %}
+        </nav>
+      </header>
+
+      <main class="participant-main">
+        <div class="participant-heading scoreboard-heading">
+          <p class="eyebrow">Live results</p>
+          <h1>Scoreboard</h1>
+          <p>{{ active_service_count }} active {{ 'service' if active_service_count == 1 else 'services' }}. Attack points are added to defense points.</p>
+        </div>
+        {% if rows %}
+          <section class="scoreboard-table" aria-label="Scoreboard">
+            <div class="scoreboard-row scoreboard-row--head"><span>Place</span><span>Participant</span><span>Attack</span><span>Defense</span><span>Total</span></div>
+            {% for row in rows %}
+              <div class="scoreboard-row{% if current_user and current_user.username == row.username %} scoreboard-row--self{% endif %}">
+                <span class="score-rank">{{ row.rank }}</span><strong>{{ row.username }}</strong><span>{{ row.attack }}</span><span>{{ row.defense }}</span><b>{{ row.score }}</b>
+              </div>
+            {% endfor %}
+          </section>
+        {% else %}
+          <section class="empty-state"><h2>The board is empty</h2><p>Scores will appear once active services are issued to participants.</p></section>
+        {% endif %}
+      </main>
+    </div>
+  </body>
+</html>

@@ -15,20 +15,29 @@
             <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">
           {% endif %}
           <span class="logo-text">
-            {{ brand_title }}{% if brand_title == 'SelfAD' %}<b>.</b>{% endif %}
+            {{ brand_title }}
           </span>
         </a>
 
         <nav aria-label="Main navigation">
-          <a href="/admin">Admin panel</a>
-          <a href="/services">Services</a>
+          {% if current_user %}
+            <a href="{{ '/admin' if current_user.is_admin else '/services' }}">{{ 'Admin panel' if current_user.is_admin else 'Services' }}</a>
+          {% else %}
+            <a href="/login">Sign in</a>
+          {% endif %}
           <a href="/scoreboard">Scoreboard</a>
         </nav>
       </header>
 
       <main class="home-main">
         <section class="ready-card" aria-labelledby="ready-title">
-          {% if is_configured %}
+          {% if is_configured and current_user and not current_user.is_admin %}
+            <h1 id="ready-title">Your account is ready.</h1>
+            <p class="ready-copy">
+              Your repositories and the result of their latest checks are in the services area.
+            </p>
+            <a class="primary-link" href="/services">Open services</a>
+          {% elif is_configured %}
             <h1 id="ready-title">{{ site_name }} is configured.</h1>
             <p class="ready-copy">
               Your instance is running. Continue in the admin panel

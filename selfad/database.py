@@ -61,6 +61,25 @@ def _migrate_existing_sqlite_schema() -> None:
             "repository_path": "VARCHAR(255)",
             "jury_repository_id": "INTEGER",
             "jury_repository_path": "VARCHAR(255)",
+            "validation_status": "VARCHAR(7) NOT NULL DEFAULT 'pending'",
+            "validation_message": (
+                "TEXT NOT NULL DEFAULT 'Repository contract has not been validated.'"
+            ),
+            "repository_generation": "INTEGER NOT NULL DEFAULT 0",
+            "validated_source_commit": "VARCHAR(64)",
+            "validated_jury_commit": "VARCHAR(64)",
+            "container_port": "INTEGER",
+            "healthcheck_path": "VARCHAR(512)",
+            "validated_at": "DATETIME",
+            "runtime_status": "VARCHAR(7) NOT NULL DEFAULT 'pending'",
+            "runtime_message": (
+                "TEXT NOT NULL DEFAULT 'Runtime check has not been started.'"
+            ),
+            "runtime_log": "TEXT NOT NULL DEFAULT ''",
+            "runtime_matches": "INTEGER NOT NULL DEFAULT 0",
+            "runtime_source_commit": "VARCHAR(64)",
+            "runtime_jury_commit": "VARCHAR(64)",
+            "runtime_checked_at": "DATETIME",
         }
         for column_name, column_type in service_column_types.items():
             if column_name not in service_columns:
@@ -109,6 +128,29 @@ def _migrate_existing_sqlite_schema() -> None:
                         "WHERE git_ssh_key_id IS NULL"
                     )
                 )
+        if "gitea_user_id" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN gitea_user_id INTEGER"))
+            added_columns.add("users.gitea_user_id")
+        if "gitea_username" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN gitea_username VARCHAR(32)"))
+            added_columns.add("users.gitea_username")
+
+        repository_event_columns = {
+            column["name"]
+            for column in schema.get_columns("repository_events")
+        }
+        repository_event_column_types = {
+            "attempts": "INTEGER NOT NULL DEFAULT 0",
+            "message": "TEXT NOT NULL DEFAULT ''",
+        }
+        for column_name, column_type in repository_event_column_types.items():
+            if column_name not in repository_event_columns:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE repository_events "
+                        f"ADD COLUMN {column_name} {column_type}"
+                    )
+                )
 
         if "services.repository_id" in added_columns:
             connection.execute(
@@ -148,6 +190,20 @@ def _migrate_existing_sqlite_schema() -> None:
                     "CREATE UNIQUE INDEX uq_users_git_ssh_key_id "
                     "ON users (git_ssh_key_id) "
                     "WHERE git_ssh_key_id IS NOT NULL"
+                )
+            )
+        if "users.gitea_user_id" in added_columns:
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX uq_users_gitea_user_id "
+                    "ON users (gitea_user_id) WHERE gitea_user_id IS NOT NULL"
+                )
+            )
+        if "users.gitea_username" in added_columns:
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX uq_users_gitea_username "
+                    "ON users (gitea_username) WHERE gitea_username IS NOT NULL"
                 )
             )
 

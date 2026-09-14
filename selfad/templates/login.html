@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Sign in to the SelfAD admin panel.">
+    <meta name="description" content="Sign in to SelfAD.">
     <title>{{ title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v={{ static_version('app.css') }}">
   </head>
@@ -15,7 +15,7 @@
             <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">
           {% endif %}
           <span class="logo-text">
-            {{ brand_title }}{% if brand_title == 'SelfAD' %}<b>.</b>{% endif %}
+            {{ brand_title }}
           </span>
         </a>
 
@@ -29,8 +29,8 @@
       <main class="auth-main">
         <section class="auth-card" aria-labelledby="login-title">
           <div class="auth-heading">
-            <h1 id="login-title">Admin sign in</h1>
-            <p>Use the administrator account created during setup.</p>
+            <h1 id="login-title">Sign in</h1>
+            <p>Use the account issued by the administrator.</p>
           </div>
 
           {% if error %}

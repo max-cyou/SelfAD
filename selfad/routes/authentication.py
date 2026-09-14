@@ -48,8 +48,11 @@ def login_page(
         return RedirectResponse(url="/setup", status_code=303)
 
     user = get_session_user(request, session)
-    if user and user.is_admin:
-        return RedirectResponse(url="/admin", status_code=303)
+    if user:
+        return RedirectResponse(
+            url="/admin" if user.is_admin else "/services",
+            status_code=303,
+        )
 
     return render_login(request, session)
 
@@ -70,7 +73,7 @@ def submit_login(
     password_hash = user.password_hash if user else DUMMY_PASSWORD_HASH
     password_is_valid = verify_password(password, password_hash)
 
-    if not user or not user.is_admin or not password_is_valid:
+    if not user or not password_is_valid:
         return render_login(
             request,
             session,
@@ -80,7 +83,10 @@ def submit_login(
         )
 
     sign_in(request, user)
-    return RedirectResponse(url="/admin", status_code=303)
+    return RedirectResponse(
+        url="/admin" if user.is_admin else "/services",
+        status_code=303,
+    )
 
 
 @router.post("/logout")

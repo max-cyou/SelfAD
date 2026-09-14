@@ -116,6 +116,65 @@
     });
   }
 
+  const userForm = document.querySelector("[data-user-form]");
+  const userFormTitle = document.querySelector("[data-user-form-title]");
+  const userFormDescription = document.querySelector(
+    "[data-user-form-description]",
+  );
+  const userSubmit = document.querySelector("[data-user-submit]");
+  const userCancel = document.querySelector("[data-user-cancel]");
+  const userEditor = document.querySelector(".participant-section");
+
+  const resetUserForm = () => {
+    if (!userForm) return;
+
+    userForm.action = userForm.dataset.createAction;
+    userForm.elements.namedItem("username").value = "";
+    userForm.elements.namedItem("username").readOnly = false;
+    userForm.elements.namedItem("email").value = "";
+    userForm.elements.namedItem("role").value = "user";
+    userForm.elements.namedItem("password").value = "";
+    userForm.elements.namedItem("password").required = true;
+    userForm.elements.namedItem("ssh_public_key").value = "";
+    userForm.elements.namedItem("ssh_public_key").required = true;
+    userFormTitle.textContent = "Create user";
+    userFormDescription.textContent =
+      "Creates participant access. Admin is only an additional interface role.";
+    userSubmit.textContent = "Create user";
+    userCancel.hidden = true;
+  };
+
+  document.querySelectorAll("[data-user-edit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!userForm) return;
+
+      userForm.action = button.dataset.updateAction;
+      userForm.elements.namedItem("username").value = button.dataset.username;
+      userForm.elements.namedItem("username").readOnly = true;
+      userForm.elements.namedItem("email").value = button.dataset.email;
+      userForm.elements.namedItem("role").value = button.dataset.role;
+      userForm.elements.namedItem("password").value = "";
+      userForm.elements.namedItem("password").required = false;
+      userForm.elements.namedItem("ssh_public_key").value = "";
+      userForm.elements.namedItem("ssh_public_key").required = false;
+      userFormTitle.textContent = "Edit user";
+      userFormDescription.textContent = button.dataset.hasSshKey === "true"
+        ? "Update account access and credentials. An SSH key is already added."
+        : "Update account access and optionally add an SSH key.";
+      userSubmit.textContent = "Save changes";
+      userCancel.hidden = false;
+      userEditor.scrollIntoView({ block: "start" });
+      userForm.elements.namedItem("email").focus();
+    });
+  });
+
+  if (userCancel && userForm) {
+    userCancel.addEventListener("click", () => {
+      resetUserForm();
+      userForm.elements.namedItem("username").focus();
+    });
+  }
+
   document.querySelectorAll("[data-new-service]").forEach((link) => {
     link.addEventListener("click", () => {
       resetServiceForm();
@@ -203,6 +262,15 @@
     form.addEventListener("submit", (event) => {
       const name = form.dataset.deleteService;
       if (!window.confirm(`Delete service "${name}"?`)) {
+        event.preventDefault();
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-delete-user]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      const name = form.dataset.deleteUser;
+      if (!window.confirm(`Delete user "${name}" and their repositories?`)) {
         event.preventDefault();
       }
     });

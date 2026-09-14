@@ -72,6 +72,17 @@ if [[ "${token_is_valid}" != true ]]; then
 fi
 
 echo "Local Gitea API access configured. Starting SelfAD."
+
+attempt=0
+until docker --host unix:///run/selfad-docker/docker.sock info >/dev/null 2>&1; do
+    attempt=$((attempt + 1))
+    if (( attempt % 12 == 1 )); then
+        echo "Waiting for the internal Docker runner..."
+    fi
+    sleep 5
+done
+
+echo "Internal Docker runner is ready."
 exec su-exec selfad:selfad \
     /opt/selfad/venv/bin/uvicorn \
     main:app \

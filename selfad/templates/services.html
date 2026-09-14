@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Your SelfAD services.">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v={{ static_version('app.css') }}">
+  </head>
+  <body style="{{ palette_style }}">
+    <div class="page page--participant">
+      <header class="site-header">
+        <a class="logo" href="/" aria-label="SelfAD home">
+          {% if show_standard_logo %}<img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">{% endif %}
+          <span class="logo-text">{{ brand_title }}</span>
+        </a>
+        <nav aria-label="Main navigation">
+          {% if current_user.is_admin %}<a href="/admin">Admin panel</a>{% endif %}
+          <a class="active" href="/services">Services</a>
+          <a href="/scoreboard">Scoreboard</a>
+          <form class="logout-form" method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Sign out</button></form>
+        </nav>
+      </header>
+
+      <main class="participant-main">
+        <div class="participant-heading">
+          <p class="eyebrow">Participant</p>
+          <h1>Your services</h1>
+          <p>Push an exploit to attack. The defense repository opens after your first successful attack.</p>
+        </div>
+
+        {% if cards %}
+          <section class="participant-services" aria-label="Assigned services">
+            {% for card in cards %}
+              {% set assignment = card.assignment %}
+              {% set service = card.service %}
+              <article class="participant-service">
+                <div class="participant-service-heading">
+                  <div>
+                    <h2>{{ service.name }}</h2>
+                    {% if service.description %}<p>{{ service.description }}</p>{% endif %}
+                  </div>
+                  <span class="score-total">{{ assignment.attack_score + assignment.defense_score }} pts</span>
+                </div>
+                <div class="repository-grid">
+                  <a class="repository-link repository-link--source" href="{{ card.source_url }}" target="_blank" rel="noreferrer">
+                    <span>Source</span><strong>Read-only service</strong><small>Open repository ↗</small>
+                  </a>
+                  <a class="repository-link" href="{{ card.attack_url }}" target="_blank" rel="noreferrer">
+                    <span>Attack</span><strong>Exploit repository</strong><small>Open repository ↗</small>
+                  </a>
+                  {% if assignment.defense_unlocked %}
+                    <a class="repository-link" href="{{ card.defense_url }}" target="_blank" rel="noreferrer">
+                      <span>Defense</span><strong>Fix repository</strong><small>Open repository ↗</small>
+                    </a>
+                  {% else %}
+                    <div class="repository-link repository-link--locked">
+                      <span>Defense</span><strong>Locked</strong><small>Unlock it with a successful attack.</small>
+                    </div>
+                  {% endif %}
+                </div>
+                <div class="submission-grid">
+                  <div><span>Attack</span><strong class="status status--{{ assignment.attack_status.value }}">{{ assignment.attack_status.value }}</strong><p>{{ assignment.attack_message }}</p><b>{{ assignment.attack_score }} pts</b></div>
+                  <div><span>Defense</span><strong class="status status--{{ assignment.defense_status.value }}">{{ assignment.defense_status.value }}</strong><p>{{ assignment.defense_message }}</p><b>{{ assignment.defense_score }} pts</b></div>
+                </div>
+              </article>
+            {% endfor %}
+          </section>
+        {% else %}
+          <section class="empty-state"><h2>No services yet</h2><p>Your administrator has not issued any active service repositories to this account.</p></section>
+        {% endif %}
+      </main>
+    </div>
+  </body>
+</html>

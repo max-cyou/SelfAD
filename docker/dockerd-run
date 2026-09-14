@@ -1,0 +1,19 @@
+#!/bin/sh
+
+exec 2>&1
+set -eu
+
+state_dir="/data/selfad/docker"
+runtime_dir="/run/selfad-docker"
+
+install -d -m 0710 -o root -g docker "${state_dir}"
+install -d -m 0770 -o root -g selfad "${runtime_dir}"
+
+exec dockerd \
+    --host="unix://${runtime_dir}/docker.sock" \
+    --group=selfad \
+    --data-root="${state_dir}" \
+    --exec-root="${runtime_dir}/exec" \
+    --pidfile="${runtime_dir}/dockerd.pid" \
+    --storage-driver=vfs \
+    --log-level=warn
