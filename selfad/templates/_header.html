@@ -1,0 +1,15 @@
+<header class="site-header">
+  <a class="logo" href="/">
+    {% if show_standard_logo is not defined or show_standard_logo %}
+      <img src="{{ url_for('static', path='/logo.svg') }}" alt="" aria-hidden="true">
+    {% endif %}
+    <span>{{ brand_title if brand_title is defined else "SelfAD" }}</span>
+  </a>
+
+  <nav aria-label="Main navigation">
+    <a{% if request.url.path == '/admin' %} class="active"{% endif %} href="/admin">Admin panel</a>
+    <a{% if request.url.path == '/services' %} class="active"{% endif %} href="/services">Services</a>
+    <a{% if request.url.path == '/scoreboard' %} class="active"{% endif %} href="/scoreboard">Scoreboard</a>
+    <a href="/admin#general">Settings</a>
+  </nav>
+</header>

@@ -68,10 +68,16 @@ def submit_login(
         return RedirectResponse(url="/setup", status_code=303)
 
     username = username.strip()
+    local_user = session.scalar(select(User).where(User.username == username))
+    gitea_username = (
+        local_user.gitea_username
+        if local_user and local_user.gitea_username
+        else username
+    )
     try:
         gitea_user = authenticate_gitea_user(
             get_gitea_settings(),
-            username=username,
+            username=gitea_username,
             password=password,
         )
     except GiteaUnavailable:
@@ -83,17 +89,18 @@ def submit_login(
             status_code=503,
         )
 
-    user = None
+    user = local_user
     if gitea_user:
-        user = session.scalar(
-            select(User).where(
-                or_(
-                    User.gitea_user_id == gitea_user.id,
-                    User.gitea_username == gitea_user.username,
+        if user is None:
+            user = session.scalar(
+                select(User).where(
+                    or_(
+                        User.gitea_user_id == gitea_user.id,
+                        User.gitea_username == gitea_user.username,
+                    )
                 )
             )
-        )
-    if user is None:
+    if gitea_user is None or user is None:
         return render_login(
             request,
             session,

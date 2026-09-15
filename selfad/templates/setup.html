@@ -9,22 +9,10 @@
   </head>
   <body>
     <div class="page">
-      <header class="site-header">
-        <a class="logo" href="/" aria-label="SelfAD home">
-          <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">
-          <span class="logo-text">SelfAD</span>
-        </a>
+      {% include "_header.html" %}
 
-        <nav aria-label="Main navigation">
-          <a href="/admin">Admin panel</a>
-          <a href="/services">Services</a>
-          <a href="/scoreboard">Scoreboard</a>
-        </nav>
-      </header>
-
-      <main>
+      <main class="setup-main">
         <section class="intro" aria-labelledby="page-title">
-          <p class="eyebrow">First launch</p>
           <h1 id="page-title">Set up your platform</h1>
           <p>
             Configure the instance and create the first administrator account.
@@ -38,7 +26,6 @@
               <h2 id="form-title">Basic configuration</h2>
               <p>All fields are required.</p>
             </div>
-            <span>Step 1 of 1</span>
           </div>
 
           {% if errors %}
@@ -150,6 +137,7 @@
           </form>
         </section>
       </main>
+      {% include "_footer.html" %}
     </div>
   </body>
 </html>

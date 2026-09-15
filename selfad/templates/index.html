@@ -9,40 +9,12 @@
   </head>
   <body style="{{ palette_style }}">
     <div class="page">
-      <header class="site-header">
-        <a class="logo" href="/" aria-label="SelfAD home">
-          {% if show_standard_logo %}
-            <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">
-          {% endif %}
-          <span class="logo-text">
-            {{ brand_title }}
-          </span>
-        </a>
-
-        <nav aria-label="Main navigation">
-          {% if current_user %}
-            <a href="{{ '/admin' if current_user.is_admin else '/services' }}">{{ 'Admin panel' if current_user.is_admin else 'Services' }}</a>
-          {% else %}
-            <a href="/login">Sign in</a>
-          {% endif %}
-          <a href="/scoreboard">Scoreboard</a>
-        </nav>
-      </header>
+      {% include "_header.html" %}
 
       <main class="home-main">
-        <section class="ready-card" aria-label="Home">
-          {% if is_configured %}
-            <div class="home-custom-content">{{ homepage_html | safe }}</div>
-          {% else %}
-            <h1>SelfAD is ready to configure.</h1>
-            <p class="ready-copy">
-              Complete the initial setup to create an administrator account
-              and start adding vulnerable services.
-            </p>
-            <a class="primary-link" href="{{ url_for('setup_page') }}">Open configuration</a>
-          {% endif %}
-        </section>
+        {{ (started_homepage_html if contest_started else not_started_homepage_html) | safe }}
       </main>
+      {% include "_footer.html" %}
     </div>
   </body>
 </html>

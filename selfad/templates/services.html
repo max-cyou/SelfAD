@@ -9,25 +9,13 @@
   </head>
   <body style="{{ palette_style }}">
     <div class="page page--participant">
-      <header class="site-header">
-        <a class="logo" href="/" aria-label="SelfAD home">
-          {% if show_standard_logo %}<img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">{% endif %}
-          <span class="logo-text">{{ brand_title }}</span>
-        </a>
-        <nav aria-label="Main navigation">
-          {% if current_user.is_admin %}<a href="/admin">Admin panel</a>{% endif %}
-          <a class="active" href="/services">Services</a>
-          <a href="/scoreboard">Scoreboard</a>
-          <form class="logout-form" method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Sign out</button></form>
-        </nav>
-      </header>
+      {% include "_header.html" %}
 
       <main class="participant-main">
         <div class="participant-heading">
           <h1>Vulnerable services</h1>
           <div class="participant-heading-meta">
             <p>Push an exploit to attack. The defense repository opens after your first successful attack.</p>
-            <a href="#">Open participants FAQ →</a>
           </div>
         </div>
 
@@ -72,6 +60,7 @@
           <section class="empty-state"><h2>No services yet</h2><p>Your administrator has not issued any active service repositories to this account.</p></section>
         {% endif %}
       </main>
+      {% include "_footer.html" %}
     </div>
   </body>
 </html>

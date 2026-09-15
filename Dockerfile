@@ -22,7 +22,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 USER root
 
-RUN apk add --no-cache python3 py3-pip docker \
+RUN apk add --no-cache python3 py3-pip docker tzdata \
     && python3 -m venv /opt/selfad/venv \
     && addgroup -S -g 10001 selfad \
     && adduser \

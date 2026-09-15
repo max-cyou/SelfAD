@@ -1,4 +1,40 @@
 (() => {
+  const startInput = document.querySelector("#contest-starts-at");
+  const timezoneInput = document.querySelector("#browser-timezone");
+  const timezoneLabel = document.querySelector("[data-browser-timezone]");
+
+  if (startInput && timezoneInput && timezoneLabel) {
+    let browserTimezone = "UTC";
+    let timezoneDetected = false;
+    try {
+      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (detected) {
+        browserTimezone = detected;
+        timezoneDetected = true;
+      }
+    } catch (_) {
+      // The server deliberately falls back to UTC.
+    }
+
+    timezoneInput.value = browserTimezone;
+    timezoneLabel.textContent = browserTimezone;
+
+    const storedUtc = startInput.dataset.utcValue;
+    if (storedUtc && !startInput.value) {
+      const storedDate = new Date(storedUtc);
+      if (!Number.isNaN(storedDate.getTime())) {
+        const read = (localMethod, utcMethod) =>
+          storedDate[timezoneDetected ? localMethod : utcMethod]();
+        const pad = (value) => String(value).padStart(2, "0");
+        startInput.value = [
+          read("getFullYear", "getUTCFullYear"),
+          pad(read("getMonth", "getUTCMonth") + 1),
+          pad(read("getDate", "getUTCDate")),
+        ].join("-") + `T${pad(read("getHours", "getUTCHours"))}:${pad(read("getMinutes", "getUTCMinutes"))}`;
+      }
+    }
+  }
+
   const tabs = Array.from(document.querySelectorAll("[data-admin-tab]"));
   const panels = Array.from(document.querySelectorAll("[data-admin-panel]"));
   const sections = new Set(tabs.map((tab) => tab.dataset.adminTab));
@@ -55,6 +91,93 @@
     ? requestedSection
     : document.body.dataset.adminSection;
   activate(initialSection, false);
+
+  const appearanceOpeners = Array.from(
+    document.querySelectorAll("[data-appearance-open]"),
+  );
+  const appearanceDialogs = Array.from(
+    document.querySelectorAll("[data-appearance-dialog]"),
+  );
+  const appearanceMode = document.querySelector("[data-appearance-mode]");
+
+  const setDialogControlsDisabled = (dialog, disabled) => {
+    dialog.querySelectorAll("input, textarea, select").forEach((control) => {
+      control.disabled = disabled;
+    });
+  };
+
+  const closeAppearanceDialog = (dialog) => {
+    if (dialog.open) dialog.close();
+    setDialogControlsDisabled(dialog, true);
+    if (appearanceMode) appearanceMode.value = "identity";
+  };
+
+  const openAppearanceDialog = (mode) => {
+    const dialog = appearanceDialogs.find(
+      (candidate) => candidate.dataset.appearanceDialog === mode,
+    );
+    if (!dialog) return;
+
+    appearanceDialogs.forEach((candidate) => {
+      if (candidate !== dialog && candidate.open) {
+        closeAppearanceDialog(candidate);
+      }
+    });
+    setDialogControlsDisabled(dialog, false);
+    if (appearanceMode) appearanceMode.value = mode;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  };
+
+  appearanceDialogs.forEach((dialog) => {
+    setDialogControlsDisabled(dialog, true);
+    dialog.querySelectorAll("[data-appearance-close]").forEach((button) => {
+      button.addEventListener("click", () => closeAppearanceDialog(dialog));
+    });
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) closeAppearanceDialog(dialog);
+    });
+    dialog.addEventListener("close", () => {
+      setDialogControlsDisabled(dialog, true);
+      if (appearanceMode) appearanceMode.value = "identity";
+    });
+  });
+
+  appearanceOpeners.forEach((button) => {
+    button.addEventListener("click", () => {
+      openAppearanceDialog(button.dataset.appearanceOpen);
+    });
+  });
+
+  document.querySelectorAll("[data-appearance-save]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (appearanceMode) appearanceMode.value = button.dataset.appearanceSave;
+    });
+  });
+
+  document.querySelectorAll("[data-color-value]").forEach((input) => {
+    const picker = input.closest(".color-value")?.querySelector("[data-color-picker]");
+    input.addEventListener("input", () => {
+      if (picker && /^#[0-9a-f]{6}$/i.test(input.value)) {
+        picker.value = input.value;
+        document.body.style.setProperty(
+          `--${input.dataset.cssVariable}`,
+          input.value,
+        );
+      }
+    });
+    picker?.addEventListener("input", () => {
+      input.value = picker.value.toUpperCase();
+      document.body.style.setProperty(
+        `--${input.dataset.cssVariable}`,
+        input.value,
+      );
+    });
+  });
+
+  if (appearanceMode && ["palette", "templates"].includes(appearanceMode.value)) {
+    openAppearanceDialog(appearanceMode.value);
+  }
 
   const serviceForm = document.querySelector("[data-service-form]");
   const serviceFormTitle = document.querySelector("[data-service-form-title]");

@@ -9,36 +9,16 @@
   </head>
   <body style="{{ palette_style }}" data-admin-section="{{ active_section }}">
     <div class="page page--admin">
-      <header class="site-header">
-        <a class="logo" href="/" aria-label="SelfAD home">
-          {% if show_standard_logo %}
-            <img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">
-          {% endif %}
-          <span class="logo-text">
-            {{ brand_title }}
-          </span>
-        </a>
-
-        <nav aria-label="Main navigation">
-          <a class="active" href="/admin">Admin panel</a>
-          <a href="/services">Services</a>
-          <a href="/scoreboard">Scoreboard</a>
-          <form class="logout-form" method="post" action="{{ url_for('logout') }}">
-            <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
-            <button type="submit">Log out</button>
-          </form>
-        </nav>
-      </header>
+      {% include "_header.html" %}
 
       <main class="admin-main">
         <section class="admin-heading" aria-labelledby="admin-title">
-          <h1 id="admin-title">Administration</h1>
-          <p>{{ site_name }}</p>
+          <h1 id="admin-title">Admin panel</h1>
+          <p>Settings for the {{ site_name }} contest.</p>
         </section>
 
         <div class="admin-workspace">
           <aside class="admin-sidebar">
-            <p>Manage</p>
             <nav class="admin-section-nav" aria-label="Admin sections" role="tablist" aria-orientation="vertical">
               <button
                 id="admin-tab-general"
@@ -107,17 +87,18 @@
                   <div class="registration-modes">
                     <div class="registration-mode">
                       <label class="general-checkbox">
-                        <input name="registration_enabled" type="checkbox"{% if registration_enabled %} checked{% endif %}>
+                        <input name="registration_enabled" type="checkbox"{% if general_form.registration_enabled %} checked{% endif %}>
                         <span>Enable registration</span>
                       </label>
                       <p>Show public registration on the sign-in page.</p>
                     </div>
                     <div class="registration-mode registration-mode--invite">
                       <label class="general-checkbox">
-                        <input name="registration_invite_only" type="checkbox"{% if registration_invite_only %} checked{% endif %}>
+                        <input name="registration_invite_only" type="checkbox"{% if general_form.registration_invite_only %} checked{% endif %}>
                         <span>Require invite code</span>
                       </label>
                       <input
+                        aria-label="Invite code"
                         name="registration_invite_code"
                         type="password"
                         minlength="4"
@@ -125,6 +106,35 @@
                         placeholder="{% if registration_invite_code_configured %}Leave blank to keep current code{% else %}Set invite code{% endif %}"
                         autocomplete="new-password"
                       >
+                    </div>
+                  </div>
+                  <div class="settings-subsection-title"><span>Contest</span></div>
+                  {% if general_errors.get('contest_starts_at_local') %}
+                    <p class="general-settings-error" role="alert">{{ general_errors.contest_starts_at_local }}</p>
+                  {% endif %}
+                  <div class="contest-settings">
+                    <div class="contest-setting">
+                      <label class="general-checkbox">
+                        <input name="contest_started" type="checkbox"{% if general_form.contest_started %} checked{% endif %}>
+                        <span>Contest started</span>
+                      </label>
+                      <p>Start the contest immediately.</p>
+                    </div>
+                    <div class="contest-setting contest-setting--scheduled">
+                      <label for="contest-starts-at">Automatic start</label>
+                      <div class="schedule-control">
+                      <input
+                        id="contest-starts-at"
+                        name="contest_starts_at_local"
+                        type="datetime-local"
+                        value="{{ general_form.contest_starts_at_local }}"
+                        data-utc-value="{{ general_form.contest_starts_at_utc }}"
+                      >
+                      <input id="browser-timezone" name="browser_timezone" type="hidden" value="UTC">
+                      <small class="contest-timezone" title="UTC is used if timezone detection fails">
+                        <span data-browser-timezone>UTC</span>
+                      </small>
+                      </div>
                     </div>
                   </div>
                   <div class="general-settings-actions">
@@ -148,15 +158,12 @@
                       <p>{{ services | length }} configured service{% if services | length != 1 %}s{% endif %}.</p>
                     </div>
                     <div class="services-heading-actions">
-                      <span class="git-state{% if gitea_configured %} git-state--ready{% endif %}">
-                        {% if gitea_configured %}Gitea connected{% else %}Gitea unavailable{% endif %}
-                      </span>
                       <a href="#service-editor" data-new-service>New service</a>
                     </div>
                   </div>
 
                   {% if services %}
-                    <div class="admin-table-wrap">
+                    <div class="admin-table-wrap" tabindex="0" role="region" aria-label="Scrollable administration table">
                       <table class="admin-table service-table">
                         <thead>
                           <tr>
@@ -173,7 +180,7 @@
                             <tr>
                               <td>
                                 <strong>{{ service.name }}</strong>
-                                <small>{{ issued_by_service.get(service.id, []) | length }} issued</small>
+                                <small>{{ issued_counts.get(service.id, 0) }} issued</small>
                               </td>
                               <td><code>{{ service.slug }}</code></td>
                               <td><span class="table-state table-state--{{ service.status.value }}">{{ service.status.value }}</span></td>
@@ -332,11 +339,11 @@
                 <div class="panel-heading">
                   <div>
                     <h2 id="users-title">Users</h2>
-                    <p>Accounts with access to this instance.</p>
+                    <p>{{ users_total }} account{% if users_total != 1 %}s{% endif %} with access to this instance.</p>
                   </div>
                 </div>
 
-                <div class="admin-table-wrap">
+                <div class="admin-table-wrap" tabindex="0" role="region" aria-label="Scrollable administration table">
                   <table class="admin-table user-table">
                     <thead>
                       <tr>
@@ -355,7 +362,7 @@
                             <strong>{{ listed_user.username }}</strong>
                             {% if listed_user.gitea_username and listed_user.gitea_username != listed_user.username %}<small>Gitea: {{ listed_user.gitea_username }}</small>{% elif listed_user.id == current_user.id %}<small>you</small>{% endif %}
                           </td>
-                          <td><span class="table-role">{{ 'Admin' if listed_user.is_admin else 'User' }}</span></td>
+                          <td><span class="table-role{% if listed_user.is_admin %} table-role--admin{% endif %}">{{ 'Admin' if listed_user.is_admin else 'User' }}</span></td>
                           <td>{{ listed_user.email }}</td>
                           <td>
                             <span class="key-state key-state--{{ 'ready' if listed_user.ssh_public_key else 'missing' }}">
@@ -368,14 +375,14 @@
                               <button
                                 type="button"
                                 data-user-edit
-                                data-update-action="{{ url_for('update_user', user_id=listed_user.id) }}"
+                                data-update-action="{{ url_for('update_user', user_id=listed_user.id) }}?users_page={{ users_page }}"
                                 data-username="{{ listed_user.username }}"
                                 data-email="{{ listed_user.email }}"
                                 data-role="{{ 'admin' if listed_user.is_admin else 'user' }}"
                                 data-has-ssh-key="{{ 'true' if listed_user.ssh_public_key else 'false' }}"
                               >Edit</button>
                               {% if listed_user.id != current_user.id %}
-                                <form method="post" action="{{ url_for('delete_user', user_id=listed_user.id) }}" data-delete-user="{{ listed_user.username }}">
+                                <form method="post" action="{{ url_for('delete_user', user_id=listed_user.id) }}?users_page={{ users_page }}" data-delete-user="{{ listed_user.username }}">
                                   <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
                                   <button class="table-button--danger" type="submit">Delete</button>
                                 </form>
@@ -388,6 +395,32 @@
                   </table>
                 </div>
 
+                {% if users_pages > 1 %}
+                  <nav class="admin-pagination" aria-label="Users pagination">
+                    {% if users_page > 1 %}
+                      <a href="?users_page={{ users_page - 1 }}#users" rel="prev">← Previous</a>
+                    {% else %}
+                      <span class="admin-pagination__disabled">← Previous</span>
+                    {% endif %}
+                    <div class="admin-pagination__pages">
+                      {% for page in users_page_items %}
+                        {% if page is none %}
+                          <span class="admin-pagination__ellipsis" aria-hidden="true">…</span>
+                        {% elif page == users_page %}
+                          <span class="admin-pagination__current" aria-current="page">{{ page }}</span>
+                        {% else %}
+                          <a href="?users_page={{ page }}#users">{{ page }}</a>
+                        {% endif %}
+                      {% endfor %}
+                    </div>
+                    {% if users_page < users_pages %}
+                      <a href="?users_page={{ users_page + 1 }}#users" rel="next">Next →</a>
+                    {% else %}
+                      <span class="admin-pagination__disabled">Next →</span>
+                    {% endif %}
+                  </nav>
+                {% endif %}
+
                 <section class="participant-section" aria-labelledby="participants-title">
                   <div class="panel-heading">
                     <div>
@@ -399,9 +432,9 @@
                   <form
                     class="service-form"
                     method="post"
-                    action="{% if user_edit_id %}{{ url_for('update_user', user_id=user_edit_id) }}{% else %}{{ url_for('create_participant') }}{% endif %}"
+                    action="{% if user_edit_id %}{{ url_for('update_user', user_id=user_edit_id) }}{% else %}{{ url_for('create_participant') }}{% endif %}?users_page={{ users_page }}"
                     data-user-form
-                    data-create-action="{{ url_for('create_participant') }}"
+                    data-create-action="{{ url_for('create_participant') }}?users_page={{ users_page }}"
                   >
                     <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
                     {% if participant_errors.get('_form') %}<p class="inline-error">{{ participant_errors['_form'] }}</p>{% endif %}
@@ -458,83 +491,154 @@
               <div class="panel-heading">
                 <div>
                   <h2 id="appearance-title">Appearance</h2>
-                  <p>Platform title, logo and interface colors.</p>
+                  <p>Colors and public page templates.</p>
                 </div>
                 {% if saved %}<span class="saved-label">Saved</span>{% endif %}
               </div>
 
-              <form class="appearance-form" method="post" action="{{ url_for('update_appearance') }}">
+              <form class="appearance-form" method="post" action="{{ url_for('update_appearance') }}" data-appearance-form>
                 <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+                <input name="appearance_mode" type="hidden" value="{{ appearance_mode }}" data-appearance-mode>
 
-                <div class="settings-section">
-                  <h3>Branding</h3>
-
-                  <div class="field{% if errors.get('site_name') %} field--error{% endif %}">
-                    <label for="site-name">Platform title</label>
-                    <input
-                      id="site-name"
-                      name="site_name"
-                      type="text"
-                      value="{{ form_values.site_name }}"
-                      maxlength="120"
-                      required
-                    >
-                    {% if errors.get('site_name') %}<small>{{ errors.site_name }}</small>{% endif %}
+                <section class="appearance-identity" aria-labelledby="site-identity-title">
+                  <div class="template-section-heading">
+                    <div>
+                      <h3 id="site-identity-title">Site identity</h3>
+                      <p>Used in the browser title and shared header.</p>
+                    </div>
                   </div>
-
-                  <div class="compact-options">
-                    <label class="compact-check">
-                      <input name="change_title" type="checkbox"{% if form_values.change_title %} checked{% endif %}>
-                      <span>Change title</span>
-                    </label>
-                    <label class="compact-check">
-                      <input name="remove_standard_logo" type="checkbox"{% if form_values.remove_standard_logo %} checked{% endif %}>
-                      <span>Remove standard logo</span>
-                    </label>
+                  <div class="template-identity-fields">
+                    <div class="field{% if errors.get('site_name') %} field--error{% endif %}">
+                      <label for="site-name">Platform title</label>
+                      <input id="site-name" name="site_name" type="text" value="{{ form_values.site_name }}" maxlength="120" required>
+                      {% if errors.get('site_name') %}<small>{{ errors.site_name }}</small>{% endif %}
+                    </div>
+                    <div class="compact-options">
+                      <label class="compact-check">
+                        <input name="change_title" type="checkbox"{% if form_values.change_title %} checked{% endif %}>
+                        <span>Change title</span>
+                      </label>
+                      <label class="compact-check">
+                        <input name="remove_standard_logo" type="checkbox"{% if form_values.remove_standard_logo %} checked{% endif %}>
+                        <span>Remove standard logo</span>
+                      </label>
+                    </div>
                   </div>
-
-                  <div class="field homepage-html-field{% if errors.get('homepage_html') %} field--error{% endif %}">
-                    <label for="homepage-html">Home page HTML</label>
-                    <textarea id="homepage-html" name="homepage_html" maxlength="20000" rows="10" spellcheck="false" required>{{ form_values.homepage_html }}</textarea>
-                    <small>{{ errors.get('homepage_html') or 'Rendered inside the main block on the public home page.' }}</small>
+                  <div class="identity-actions">
+                    <button class="save-appearance" type="submit" data-appearance-save="identity">Save identity</button>
                   </div>
+                </section>
+
+                <div class="appearance-launchers" aria-label="Appearance editors">
+                  <button
+                    type="button"
+                    aria-controls="appearance-palette"
+                    data-appearance-open="palette"
+                  >Change palette</button>
+                  <button
+                    type="button"
+                    aria-controls="appearance-templates"
+                    data-appearance-open="templates"
+                  >Change templates</button>
                 </div>
 
-                <div class="settings-section palette-section">
-                  <div class="settings-title">
-                    <h3>Palette</h3>
-                    <span>HEX</span>
+                <dialog class="appearance-dialog appearance-dialog--palette" id="appearance-palette" data-appearance-dialog="palette">
+                <div class="appearance-editor">
+                  <div class="appearance-editor-heading">
+                    <div>
+                      <h3>Interface palette</h3>
+                      <p>Every interface color is editable. Use six-digit HEX values.</p>
+                    </div>
+                    <button class="appearance-dialog-close" type="button" aria-label="Close palette" data-appearance-close>×</button>
                   </div>
-
-                  <div class="palette-fields">
-                    {% for name, field in palette_fields.items() %}
-                      <div class="palette-field{% if errors.get(name) %} palette-field--error{% endif %}">
-                        <label for="{{ name }}">{{ field.label }}</label>
-                        <div class="color-value">
-                          <span class="color-swatch" style="background: {{ palette_values[name] }}" aria-hidden="true"></span>
-                          <input
-                            id="{{ name }}"
-                            name="{{ name }}"
-                            type="text"
-                            value="{{ form_values[name] }}"
-                            maxlength="7"
-                            pattern="#[0-9A-Fa-f]{6}"
-                            spellcheck="false"
-                            required
-                          >
+                  <div class="palette-groups">
+                    {% for group_name, field_names in palette_groups %}
+                      <section class="palette-group" aria-labelledby="palette-group-{{ loop.index }}">
+                        <h4 id="palette-group-{{ loop.index }}">{{ group_name }}</h4>
+                        <div class="palette-fields">
+                          {% for name in field_names %}
+                            {% set field = palette_fields[name] %}
+                            <div class="palette-field{% if errors.get(name) %} palette-field--error{% endif %}">
+                              <label for="{{ name }}">{{ field.label }}</label>
+                              <div class="color-value">
+                                <input
+                                  class="color-picker"
+                                  type="color"
+                                  value="{{ form_values[name] }}"
+                                  aria-label="Choose {{ field.label | lower }}"
+                                  data-color-picker
+                                >
+                                <input
+                                  id="{{ name }}"
+                                  name="{{ name }}"
+                                  type="text"
+                                  value="{{ form_values[name] }}"
+                                  maxlength="7"
+                                  pattern="#[0-9A-Fa-f]{6}"
+                                  spellcheck="false"
+                                  required
+                                  data-color-value
+                                  data-css-variable="{{ field.css_variable }}"
+                                >
+                              </div>
+                              {% if errors.get(name) %}<small>{{ errors[name] }}</small>{% endif %}
+                            </div>
+                          {% endfor %}
                         </div>
-                        {% if errors.get(name) %}<small>{{ errors[name] }}</small>{% endif %}
-                      </div>
+                      </section>
                     {% endfor %}
                   </div>
                 </div>
+                <div class="appearance-dialog-actions">
+                  <button type="button" data-appearance-close>Cancel</button>
+                  <button class="save-appearance" type="submit" data-appearance-save="palette">Save palette</button>
+                </div>
+                </dialog>
 
-                <button class="save-appearance" type="submit">Save appearance</button>
+                <dialog class="appearance-dialog appearance-dialog--templates" id="appearance-templates" data-appearance-dialog="templates">
+                <div class="appearance-editor">
+                  <div class="appearance-editor-heading">
+                    <div>
+                      <h3>Main page templates</h3>
+                      <p>Raw HTML rendered in the centered area of the public home page.</p>
+                    </div>
+                    <button class="appearance-dialog-close" type="button" aria-label="Close templates" data-appearance-close>×</button>
+                  </div>
+                  <section class="template-settings-section">
+                    <div class="template-section-heading">
+                      <h3>Not started main page</h3>
+                      <p>Shown until the contest starts.</p>
+                    </div>
+                    <div class="field homepage-html-field{% if errors.get('not_started_homepage_html') %} field--error{% endif %}">
+                      <label for="not-started-homepage-html">HTML</label>
+                      <textarea id="not-started-homepage-html" name="not_started_homepage_html" maxlength="20000" rows="11" spellcheck="false" required>{{ form_values.not_started_homepage_html }}</textarea>
+                      <small>{{ errors.get('not_started_homepage_html') or 'Rendered inside the centered main block.' }}</small>
+                    </div>
+                  </section>
+
+                  <section class="template-settings-section">
+                    <div class="template-section-heading">
+                      <h3>Started main page</h3>
+                      <p>Shown after manual or automatic contest start.</p>
+                    </div>
+                    <div class="field homepage-html-field{% if errors.get('started_homepage_html') %} field--error{% endif %}">
+                      <label for="started-homepage-html">HTML</label>
+                      <textarea id="started-homepage-html" name="started_homepage_html" maxlength="20000" rows="11" spellcheck="false" required>{{ form_values.started_homepage_html }}</textarea>
+                      <small>{{ errors.get('started_homepage_html') or 'Rendered inside the centered main block.' }}</small>
+                    </div>
+                  </section>
+                </div>
+                <div class="appearance-dialog-actions">
+                  <button type="button" data-appearance-close>Cancel</button>
+                  <button class="save-appearance" type="submit" data-appearance-save="templates">Save templates</button>
+                </div>
+                </dialog>
               </form>
             </section>
           </div>
         </div>
       </main>
+      {% include "_footer.html" %}
     </div>
     <script src="{{ url_for('static', path='/admin.js') }}?v={{ static_version('admin.js') }}" defer></script>
   </body>

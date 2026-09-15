@@ -78,6 +78,20 @@ def _migrate_existing_sqlite_schema() -> None:
                     "registration_invite_code_hash VARCHAR(255)"
                 )
             )
+        if "contest_started" not in instance_config_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE instance_config ADD COLUMN "
+                    "contest_started BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+        if "contest_starts_at" not in instance_config_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE instance_config ADD COLUMN "
+                    "contest_starts_at DATETIME"
+                )
+            )
 
         service_columns = {
             column["name"] for column in schema.get_columns("services")
@@ -171,6 +185,51 @@ def _migrate_existing_sqlite_schema() -> None:
                     "ADD COLUMN homepage_html TEXT NOT NULL DEFAULT ''"
                 )
             )
+        if "started_homepage_html" not in branding_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE branding_settings "
+                    "ADD COLUMN started_homepage_html TEXT NOT NULL DEFAULT ''"
+                )
+            )
+
+        palette_columns = {
+            column["name"] for column in schema.get_columns("palette_settings")
+        }
+        palette_column_defaults = {
+            "success_color": "#287455",
+            "success_soft_color": "#EEF6F1",
+            "warning_color": "#9A6700",
+            "warning_soft_color": "#FFF8C5",
+            "focus_color": "#2563EB",
+            "button_color": "#172033",
+            "button_hover_color": "#354052",
+            "button_text_color": "#FFFFFF",
+            "input_color": "#FFFFFF",
+            "input_disabled_color": "#FAFBFC",
+            "table_heading_color": "#FAFBFC",
+            "table_hover_color": "#FAFBFC",
+            "table_selected_color": "#F3F6FA",
+            "header_color": "#FFFFFF",
+            "header_text_color": "#111827",
+            "header_link_color": "#6B7280",
+            "header_link_hover_color": "#111827",
+            "home_color": "#FFFFFF",
+            "home_title_color": "#111827",
+            "home_text_color": "#6B7280",
+            "home_link_color": "#4B5563",
+            "home_link_hover_color": "#111827",
+            "footer_text_color": "#9CA3AF",
+            "footer_hover_color": "#6B7280",
+        }
+        for column_name, default in palette_column_defaults.items():
+            if column_name not in palette_columns:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE palette_settings ADD COLUMN {column_name} "
+                        f"VARCHAR(7) NOT NULL DEFAULT '{default}'"
+                    )
+                )
 
         repository_event_columns = {
             column["name"]

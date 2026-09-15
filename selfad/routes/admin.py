@@ -1,5 +1,6 @@
 import re
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -12,8 +13,10 @@ from selfad.auth import csrf_token_is_valid, get_csrf_token, get_session_user
 from selfad.branding import (
     HEX_COLOR_PATTERN,
     PALETTE_FIELDS,
+    PALETTE_GROUPS,
     get_branding_context,
 )
+from selfad.contest import as_utc, start_contest_if_due
 from selfad.database import get_session
 from selfad.gitea import (
     GiteaConflict,
@@ -59,6 +62,7 @@ router = APIRouter()
 
 SERVICE_SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$")
+USERS_PAGE_SIZE = 20
 
 DEFAULT_SERVICE_FORM = {
     "name": "",
@@ -75,6 +79,36 @@ DEFAULT_PARTICIPANT_FORM = {
     "ssh_public_key": "",
     "role": "user",
 }
+
+
+def _requested_users_page(request: Request) -> int:
+    try:
+        return max(1, int(request.query_params.get("users_page", "1")))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _pagination_items(current_page: int, total_pages: int) -> list[int | None]:
+    if total_pages <= 7:
+        return list(range(1, total_pages + 1))
+
+    visible_pages = sorted(
+        page
+        for page in {1, total_pages, current_page - 1, current_page, current_page + 1}
+        if 1 <= page <= total_pages
+    )
+    items: list[int | None] = []
+    previous = 0
+    for page in visible_pages:
+        if page - previous > 1:
+            items.append(None)
+        items.append(page)
+        previous = page
+    return items
+
+
+def _users_admin_url(request: Request) -> str:
+    return f"/admin?users_page={_requested_users_page(request)}#users"
 
 
 def get_admin_access(
@@ -107,15 +141,36 @@ def render_admin(
     participant_form: dict[str, str] | None = None,
     user_edit_id: int | None = None,
     general_errors: dict[str, str] | None = None,
+    general_form: dict[str, object] | None = None,
     active_section: str = "general",
+    appearance_mode: str | None = None,
     status_code: int = 200,
 ):
     branding = get_branding_context(session)
+    config = session.get(InstanceConfig, 1)
+    if start_contest_if_due(config):
+        session.commit()
+    scheduled_start = config.contest_starts_at if config else None
+    scheduled_start_utc = (
+        as_utc(scheduled_start).isoformat().replace("+00:00", "Z")
+        if scheduled_start
+        else ""
+    )
+    general_values: dict[str, object] = {
+        "contest_started": bool(config and config.contest_started),
+        "contest_starts_at_local": "",
+        "contest_starts_at_utc": scheduled_start_utc,
+        "registration_enabled": branding["registration_enabled"],
+        "registration_invite_only": branding["registration_invite_only"],
+    }
+    if general_form:
+        general_values.update(general_form)
     appearance_values = {
         "site_name": branding["site_name"],
         "change_title": branding["change_title"],
         "remove_standard_logo": branding["remove_standard_logo"],
-        "homepage_html": branding["homepage_html"],
+        "not_started_homepage_html": branding["not_started_homepage_html"],
+        "started_homepage_html": branding["started_homepage_html"],
         **branding["palette_values"],
     }
     if form_values:
@@ -124,22 +179,39 @@ def render_admin(
     services = session.scalars(
         select(Service).order_by(Service.name, Service.id)
     ).all()
-    users = session.scalars(select(User).order_by(User.username)).all()
-    issued_repositories = session.scalars(
-        select(ParticipantService).order_by(ParticipantService.id)
+    users_total = session.scalar(select(func.count()).select_from(User)) or 0
+    users_pages = max(1, (users_total + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE)
+    users_page = min(_requested_users_page(request), users_pages)
+    users = session.scalars(
+        select(User)
+        .order_by(User.username, User.id)
+        .offset((users_page - 1) * USERS_PAGE_SIZE)
+        .limit(USERS_PAGE_SIZE)
     ).all()
-    issued_by_service: dict[int, list[tuple[ParticipantService, User | None]]] = {}
-    users_by_id = {listed_user.id: listed_user for listed_user in users}
+    visible_user_ids = [listed_user.id for listed_user in users]
     points_by_user = {listed_user.id: 0 for listed_user in users}
-    for issued in issued_repositories:
-        issued_by_service.setdefault(issued.service_id, []).append(
-            (issued, users_by_id.get(issued.user_id))
+    if visible_user_ids:
+        points_by_user.update(
+            dict(
+                session.execute(
+                    select(
+                        ParticipantService.user_id,
+                        func.sum(
+                            ParticipantService.attack_score
+                            + ParticipantService.defense_score
+                        ),
+                    )
+                    .where(ParticipantService.user_id.in_(visible_user_ids))
+                    .group_by(ParticipantService.user_id)
+                ).all()
+            )
         )
-        points_by_user[issued.user_id] = (
-            points_by_user.get(issued.user_id, 0)
-            + issued.attack_score
-            + issued.defense_score
-        )
+    issued_counts = dict(
+        session.execute(
+            select(ParticipantService.service_id, func.count())
+            .group_by(ParticipantService.service_id)
+        ).all()
+    )
     gitea_settings = get_gitea_settings()
     pending_by_repository = dict(
         session.execute(
@@ -164,19 +236,30 @@ def render_admin(
             "errors": errors or {},
             "form_values": appearance_values,
             "palette_fields": PALETTE_FIELDS,
+            "palette_groups": PALETTE_GROUPS,
             "csrf_token": get_csrf_token(request),
             "active_section": active_section,
+            "appearance_mode": (
+                appearance_mode
+                if appearance_mode in {"identity", "palette", "templates"}
+                else "identity"
+            ),
             "services": services,
             "service_errors": service_errors or {},
             "service_form": service_form or DEFAULT_SERVICE_FORM,
             "service_edit_id": service_edit_id,
             "users": users,
+            "users_total": users_total,
+            "users_page": users_page,
+            "users_pages": users_pages,
+            "users_page_items": _pagination_items(users_page, users_pages),
             "points_by_user": points_by_user,
-            "issued_by_service": issued_by_service,
+            "issued_counts": issued_counts,
             "participant_errors": participant_errors or {},
             "participant_form": participant_form or DEFAULT_PARTICIPANT_FORM,
             "user_edit_id": user_edit_id,
             "general_errors": general_errors or {},
+            "general_form": general_values,
             "ssh_key_required": not bool(user.ssh_public_key),
             "gitea_configured": gitea_settings.configured,
             "gitea_public_url": gitea_settings.public_url,
@@ -367,7 +450,12 @@ def admin_page(
         session,
         user,
         saved=saved,
-        active_section="appearance" if saved else "general",
+        appearance_mode=request.query_params.get("appearance_mode"),
+        active_section=(
+            "users"
+            if "users_page" in request.query_params
+            else ("appearance" if saved else "general")
+        ),
     )
 
 
@@ -782,7 +870,7 @@ async def create_participant(
     participant = User(username=values["username"], email=values["email"], password_hash=hash_password(password), is_admin=values["role"] == "admin", ssh_public_key=values["ssh_public_key"], git_ssh_key_id=ssh_key_id, gitea_user_id=gitea_user.id, gitea_username=gitea_user.username)
     session.add(participant)
     session.commit()
-    return RedirectResponse(url="/admin#users", status_code=303)
+    return RedirectResponse(url=_users_admin_url(request), status_code=303)
 
 
 @router.post("/admin/users/{user_id}", response_class=HTMLResponse)
@@ -877,7 +965,7 @@ async def update_user(
     if password:
         target.password_hash = hash_password(password)
     session.commit()
-    return RedirectResponse(url="/admin#users", status_code=303)
+    return RedirectResponse(url=_users_admin_url(request), status_code=303)
 
 
 @router.post("/admin/users/{user_id}/delete", response_class=HTMLResponse)
@@ -936,7 +1024,7 @@ async def delete_user(
         session.delete(assignment)
     session.delete(target)
     session.commit()
-    return RedirectResponse(url="/admin#users", status_code=303)
+    return RedirectResponse(url=_users_admin_url(request), status_code=303)
 
 
 @router.post("/admin/appearance", response_class=HTMLResponse)
@@ -952,29 +1040,52 @@ async def update_appearance(
     if not csrf_token_is_valid(request, form.get("csrf_token")):
         return HTMLResponse("Invalid CSRF token.", status_code=403)
 
-    site_name = str(form.get("site_name", "")).strip()
-    homepage_html = str(form.get("homepage_html", "")).strip()
+    current_appearance = get_branding_context(session)
+    site_name = str(form.get("site_name", current_appearance["site_name"])).strip()
+    appearance_mode = str(form.get("appearance_mode", "identity"))
+    if appearance_mode not in {"identity", "palette", "templates"}:
+        appearance_mode = "identity"
+    not_started_homepage_html = str(
+        form.get(
+            "not_started_homepage_html",
+            current_appearance["not_started_homepage_html"],
+        )
+    ).strip()
+    started_homepage_html = str(
+        form.get(
+            "started_homepage_html",
+            current_appearance["started_homepage_html"],
+        )
+    ).strip()
     palette_values = {
-        name: str(form.get(name, "")).strip().upper()
+        name: str(
+            form.get(name, current_appearance["palette_values"][name])
+        ).strip().upper()
         for name in PALETTE_FIELDS
     }
     errors: dict[str, str] = {}
     if not 2 <= len(site_name) <= 120:
         errors["site_name"] = "Use between 2 and 120 characters."
-    if not homepage_html:
-        errors["homepage_html"] = "Home page HTML cannot be empty."
-    elif len(homepage_html) > 20_000:
-        errors["homepage_html"] = "Use no more than 20,000 characters."
-
-    for name, value in palette_values.items():
-        if not HEX_COLOR_PATTERN.fullmatch(value):
-            errors[name] = "Use #RRGGBB."
+    if appearance_mode == "templates":
+        for field_name, value in (
+            ("not_started_homepage_html", not_started_homepage_html),
+            ("started_homepage_html", started_homepage_html),
+        ):
+            if not value:
+                errors[field_name] = "Template HTML cannot be empty."
+            elif len(value) > 20_000:
+                errors[field_name] = "Use no more than 20,000 characters."
+    elif appearance_mode == "palette":
+        for name, value in palette_values.items():
+            if not HEX_COLOR_PATTERN.fullmatch(value):
+                errors[name] = "Use #RRGGBB."
 
     form_values: dict[str, object] = {
         "site_name": site_name,
         "change_title": form.get("change_title") == "on",
         "remove_standard_logo": form.get("remove_standard_logo") == "on",
-        "homepage_html": homepage_html,
+        "not_started_homepage_html": not_started_homepage_html,
+        "started_homepage_html": started_homepage_html,
         **palette_values,
     }
     if errors:
@@ -985,6 +1096,7 @@ async def update_appearance(
             errors=errors,
             form_values=form_values,
             active_section="appearance",
+            appearance_mode=appearance_mode,
             status_code=422,
         )
 
@@ -993,7 +1105,7 @@ async def update_appearance(
     palette = session.get(PaletteSettings, 1)
     if config is None or branding is None:
         return RedirectResponse(url="/setup", status_code=303)
-    if palette is None:
+    if palette is None and appearance_mode == "palette":
         palette = PaletteSettings(id=1, **palette_values)
 
     config.site_name = site_name
@@ -1001,11 +1113,14 @@ async def update_appearance(
     branding.remove_standard_logo = bool(
         form_values["remove_standard_logo"]
     )
-    branding.homepage_html = homepage_html
-    for name, value in palette_values.items():
-        setattr(palette, name, value)
-
-    session.add_all([config, branding, palette])
+    if appearance_mode == "templates":
+        branding.homepage_html = not_started_homepage_html
+        branding.started_homepage_html = started_homepage_html
+    elif appearance_mode == "palette":
+        for name, value in palette_values.items():
+            setattr(palette, name, value)
+        session.add(palette)
+    session.add_all([config, branding])
     session.commit()
 
     return RedirectResponse(url="/admin?saved=true#appearance", status_code=303)
@@ -1030,7 +1145,27 @@ async def update_registration(
     registration_enabled = form.get("registration_enabled") == "on"
     invite_only = form.get("registration_invite_only") == "on"
     invite_code = str(form.get("registration_invite_code", "")).strip()
+    contest_started = form.get("contest_started") == "on"
+    contest_starts_at_local = str(
+        form.get("contest_starts_at_local", "")
+    ).strip()
+    browser_timezone = str(form.get("browser_timezone", "UTC")).strip()
+    contest_starts_at: datetime | None = None
     errors: dict[str, str] = {}
+    if contest_starts_at_local:
+        try:
+            local_start = datetime.fromisoformat(contest_starts_at_local)
+            if local_start.tzinfo is not None:
+                raise ValueError
+            try:
+                start_timezone = ZoneInfo(browser_timezone)
+            except (ZoneInfoNotFoundError, ValueError):
+                start_timezone = timezone.utc
+            contest_starts_at = local_start.replace(
+                tzinfo=start_timezone
+            ).astimezone(timezone.utc)
+        except ValueError:
+            errors["contest_starts_at_local"] = "Use a valid date and time."
     if invite_code and not 4 <= len(invite_code) <= 128:
         errors["registration_invite_code"] = "Use between 4 and 128 characters."
     if invite_only and not invite_code and not config.registration_invite_code_hash:
@@ -1041,10 +1176,19 @@ async def update_registration(
             session,
             user,
             general_errors=errors,
+            general_form={
+                "contest_started": contest_started,
+                "contest_starts_at_local": contest_starts_at_local,
+                "contest_starts_at_utc": "",
+                "registration_enabled": registration_enabled,
+                "registration_invite_only": invite_only,
+            },
             active_section="general",
             status_code=422,
         )
 
+    config.contest_started = contest_started
+    config.contest_starts_at = contest_starts_at
     config.registration_enabled = registration_enabled
     config.registration_invite_only = invite_only
     if invite_code:

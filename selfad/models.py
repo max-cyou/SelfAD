@@ -17,6 +17,11 @@ class InstanceConfig(Base):
         nullable=False,
     )
     setup_complete: Mapped[bool] = mapped_column(default=False, nullable=False)
+    contest_started: Mapped[bool] = mapped_column(default=False, nullable=False)
+    contest_starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     registration_enabled: Mapped[bool] = mapped_column(
         default=False,
         nullable=False,
@@ -45,6 +50,11 @@ class BrandingSettings(Base):
         default="",
         nullable=False,
     )
+    started_homepage_html: Mapped[str] = mapped_column(
+        Text,
+        default="",
+        nullable=False,
+    )
 
 
 class PaletteSettings(Base):
@@ -64,6 +74,30 @@ class PaletteSettings(Base):
     accent_contrast_color: Mapped[str] = mapped_column(String(7), nullable=False)
     danger_color: Mapped[str] = mapped_column(String(7), nullable=False)
     danger_soft_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    success_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    success_soft_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    warning_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    warning_soft_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    focus_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    button_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    button_hover_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    button_text_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    input_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    input_disabled_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    table_heading_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    table_hover_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    table_selected_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    header_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    header_text_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    header_link_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    header_link_hover_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    home_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    home_title_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    home_text_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    home_link_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    home_link_hover_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    footer_text_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    footer_hover_color: Mapped[str] = mapped_column(String(7), nullable=False)
 
 
 class ServiceStatus(str, Enum):
