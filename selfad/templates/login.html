@@ -30,7 +30,7 @@
         <section class="auth-card" aria-labelledby="login-title">
           <div class="auth-heading">
             <h1 id="login-title">Sign in</h1>
-            <p>Use the account issued by the administrator.</p>
+            <p>Use your Gitea username and password.</p>
           </div>
 
           {% if error %}
@@ -59,12 +59,14 @@
                 id="password"
                 name="password"
                 type="password"
+                maxlength="128"
                 autocomplete="current-password"
                 required
               >
             </div>
 
             <button type="submit">Sign in</button>
+            {% if registration_enabled %}<a class="auth-switch-link" href="/register">Create account →</a>{% endif %}
           </form>
         </section>
       </main>

@@ -398,6 +398,18 @@ button:focus-visible {
   background: var(--accent-hover);
 }
 
+.auth-switch-link {
+  justify-self: center;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.auth-switch-link:hover {
+  color: var(--text);
+}
+
 .logout-form {
   flex: none;
   margin: 0;
@@ -443,6 +455,33 @@ button:focus-visible {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.6;
+}
+
+.participant-heading-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 10px;
+}
+
+.participant-heading-meta p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.participant-heading-meta a {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.participant-heading-meta a:hover {
+  color: var(--text);
 }
 
 .participant-services {
@@ -630,7 +669,7 @@ button:focus-visible {
 }
 
 .scoreboard-table {
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .scoreboard-row {
@@ -674,6 +713,164 @@ button:focus-visible {
 .score-rank {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.score-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.score-table th {
+  height: 38px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--surface-subtle);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.score-table th:first-child {
+  width: 68px;
+}
+
+.score-table th:nth-child(2) {
+  width: 34%;
+}
+
+.score-table th:last-child {
+  width: 86px;
+}
+
+.score-table th code {
+  display: block;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.score-table th small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.score-table td {
+  height: 44px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-soft);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.score-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.score-table td strong,
+.score-table td b {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.score-row--self td {
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+.registration-card {
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.registration-page {
+  width: min(100%, 760px);
+  margin-top: 0;
+}
+
+.registration-page .registration-heading h1 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+
+.registration-heading {
+  padding: 20px 22px 17px;
+  border-bottom: 1px solid var(--border);
+}
+
+.registration-heading h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+
+.registration-heading p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.registration-error {
+  margin: 18px 22px 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--surface));
+  border-radius: 5px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  font-size: 11px;
+}
+
+.registration-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 20px 22px 22px;
+}
+
+.registration-key,
+.registration-invite,
+.registration-actions {
+  grid-column: 1 / -1;
+}
+
+.registration-actions {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.registration-actions button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--accent-contrast);
+  background: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.registration-actions button:hover {
+  background: var(--accent-hover);
 }
 
 .admin-main {
@@ -814,8 +1011,143 @@ button:focus-visible {
 }
 
 .users-panel,
-.appearance-panel {
+.appearance-panel,
+.general-panel {
   width: 100%;
+}
+
+.general-settings-form {
+  display: grid;
+}
+
+.settings-subsection-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px 0;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-subsection-title::after {
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+  content: "";
+}
+
+.general-settings-error {
+  margin: 14px 22px 0;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.registration-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.registration-mode {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 10px 18px;
+}
+
+.registration-mode--invite {
+  border-left: 1px solid var(--border);
+}
+
+.registration-mode p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.registration-mode > input {
+  width: min(100%, 220px);
+  height: 30px;
+  margin-left: auto;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  outline: none;
+  color: var(--text);
+  background: var(--surface);
+  font-size: 10px;
+}
+
+.registration-mode > input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.general-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.general-setting-row h3 {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.general-setting-row p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.general-checkbox {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.general-checkbox input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.general-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 18px 12px;
+}
+
+.general-settings-actions button {
+  min-height: 32px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--accent-contrast);
+  background: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.general-settings-actions button:hover {
+  background: var(--accent-hover);
 }
 
 .user-row {
@@ -857,6 +1189,47 @@ button:focus-visible {
   padding: 20px 22px 22px;
   border-top: 1px solid var(--border);
   background: var(--surface-subtle);
+}
+
+.registration-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+}
+
+.registration-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.registration-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.registration-toggle button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-soft);
+  background: var(--surface);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.registration-toggle button:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
 }
 
 .gitea-credentials-heading {
@@ -1813,6 +2186,14 @@ button:focus-visible {
   grid-column: 1 / -1;
 }
 
+.homepage-html-field textarea {
+  min-height: 210px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.55;
+  white-space: pre;
+}
+
 .home-main {
   display: flex;
   align-items: center;
@@ -1836,6 +2217,44 @@ button:focus-visible {
   font-size: clamp(30px, 5vw, 44px);
   letter-spacing: -0.045em;
   line-height: 1.12;
+}
+
+.home-custom-content {
+  display: grid;
+  justify-items: center;
+}
+
+.home-custom-content > :first-child {
+  margin-top: 0;
+}
+
+.home-custom-content > :last-child {
+  margin-bottom: 0;
+}
+
+.home-actions {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.home-scoreboard-link {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.home-scoreboard-link:hover {
+  color: var(--text);
+}
+
+.home-powered-by {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
 }
 
 .ready-copy {
@@ -2028,7 +2447,7 @@ button:focus-visible {
 
   .admin-section-nav {
     display: grid;
-    grid-template-columns: repeat(3, minmax(max-content, 1fr));
+    grid-template-columns: repeat(4, minmax(max-content, 1fr));
     gap: 5px;
     overflow-x: auto;
   }
@@ -2067,6 +2486,60 @@ button:focus-visible {
   }
 
   .appearance-form .save-appearance {
+    grid-column: auto;
+  }
+
+  .registration-toggle {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .general-setting-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .settings-subsection-title {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .registration-modes {
+    grid-template-columns: 1fr;
+  }
+
+  .registration-mode {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .registration-mode > input {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .registration-mode--invite {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .general-settings-actions {
+    padding: 16px 18px 18px;
+  }
+
+  .registration-form {
+    grid-template-columns: 1fr;
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .registration-key,
+  .registration-invite,
+  .registration-actions {
     grid-column: auto;
   }
 
@@ -2140,6 +2613,12 @@ button:focus-visible {
 
   .participant-service-heading {
     padding: 18px;
+  }
+
+  .participant-heading-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .participant-service .repository-grid,

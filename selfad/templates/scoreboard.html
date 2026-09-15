@@ -24,18 +24,30 @@
 
       <main class="participant-main">
         <div class="participant-heading scoreboard-heading">
-          <p class="eyebrow">Live results</p>
           <h1>Scoreboard</h1>
-          <p>{{ active_service_count }} active {{ 'service' if active_service_count == 1 else 'services' }}. Attack points are added to defense points.</p>
         </div>
         {% if rows %}
           <section class="scoreboard-table" aria-label="Scoreboard">
-            <div class="scoreboard-row scoreboard-row--head"><span>Place</span><span>Participant</span><span>Attack</span><span>Defense</span><span>Total</span></div>
-            {% for row in rows %}
-              <div class="scoreboard-row{% if current_user and current_user.username == row.username %} scoreboard-row--self{% endif %}">
-                <span class="score-rank">{{ row.rank }}</span><strong>{{ row.username }}</strong><span>{{ row.attack }}</span><span>{{ row.defense }}</span><b>{{ row.score }}</b>
-              </div>
-            {% endfor %}
+            <table class="score-table">
+              <thead>
+                <tr>
+                  <th>Place</th>
+                  <th>Participant</th>
+                  {% for service in active_services %}<th><code>{{ service.slug }}</code><small>attack / defense</small></th>{% endfor %}
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                  <tr{% if current_user and current_user.username == row.username %} class="score-row--self"{% endif %}>
+                    <td class="score-rank">{{ row.rank }}</td>
+                    <td><strong>{{ row.username }}</strong></td>
+                    {% for result in row.service_scores %}<td>{{ result.attack }} / {{ result.defense }}</td>{% endfor %}
+                    <td><b>{{ row.score }}</b></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </section>
         {% else %}
           <section class="empty-state"><h2>The board is empty</h2><p>Scores will appear once active services are issued to participants.</p></section>

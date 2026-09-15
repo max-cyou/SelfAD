@@ -30,22 +30,11 @@
       </header>
 
       <main class="home-main">
-        <section class="ready-card" aria-labelledby="ready-title">
-          {% if is_configured and current_user and not current_user.is_admin %}
-            <h1 id="ready-title">Your account is ready.</h1>
-            <p class="ready-copy">
-              Your repositories and the result of their latest checks are in the services area.
-            </p>
-            <a class="primary-link" href="/services">Open services</a>
-          {% elif is_configured %}
-            <h1 id="ready-title">{{ site_name }} is configured.</h1>
-            <p class="ready-copy">
-              Your instance is running. Continue in the admin panel
-              to add the first vulnerable service.
-            </p>
-            <a class="primary-link" href="/admin">Open admin panel</a>
+        <section class="ready-card" aria-label="Home">
+          {% if is_configured %}
+            <div class="home-custom-content">{{ homepage_html | safe }}</div>
           {% else %}
-            <h1 id="ready-title">SelfAD is ready to configure.</h1>
+            <h1>SelfAD is ready to configure.</h1>
             <p class="ready-copy">
               Complete the initial setup to create an administrator account
               and start adding vulnerable services.

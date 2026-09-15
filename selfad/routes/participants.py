@@ -1,19 +1,50 @@
 from collections import defaultdict
+import re
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
-from selfad.auth import get_csrf_token, get_session_user
+from selfad.auth import (
+    csrf_token_is_valid,
+    get_csrf_token,
+    get_session_user,
+    sign_in,
+)
 from selfad.branding import get_branding_context
 from selfad.database import get_session
-from selfad.models import ParticipantService, Service, ServiceStatus, User
-from selfad.settings import get_gitea_settings
+from selfad.gitea import (
+    GiteaConflict,
+    GiteaError,
+    GiteaUnavailable,
+    add_user_ssh_key,
+    create_gitea_user,
+    delete_gitea_user,
+)
+from selfad.models import (
+    InstanceConfig,
+    ParticipantService,
+    Service,
+    ServiceRunStatus,
+    ServiceStatus,
+    User,
+)
+from selfad.participants import provision_participant_service
+from selfad.security import hash_password, verify_password
+from selfad.settings import get_gitea_settings, get_gitea_webhook_secret
 from selfad.web import templates
 
 
 router = APIRouter()
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
+DEFAULT_REGISTRATION_FORM = {
+    "username": "",
+    "email": "",
+    "ssh_public_key": "",
+}
 
 
 def participant_access(
@@ -82,18 +113,20 @@ def participant_services(
     )
 
 
-@router.get("/scoreboard", response_class=HTMLResponse)
-def scoreboard(
+def render_scoreboard(
     request: Request,
-    session: Session = Depends(get_session),
+    session: Session,
+    *,
+    status_code: int = 200,
 ):
     branding = get_branding_context(session)
     current_user = get_session_user(request, session)
-    active_service_ids = set(
-        session.scalars(
-            select(Service.id).where(Service.status == ServiceStatus.ACTIVE)
-        ).all()
-    )
+    active_services = session.scalars(
+        select(Service)
+        .where(Service.status == ServiceStatus.ACTIVE)
+        .order_by(Service.slug, Service.id)
+    ).all()
+    active_service_ids = {service.id for service in active_services}
     assignments = session.scalars(select(ParticipantService)).all()
     user_ids = {
         assignment.user_id
@@ -109,6 +142,7 @@ def scoreboard(
     totals: dict[int, dict[str, int]] = defaultdict(
         lambda: {"attack": 0, "defense": 0, "services": 0}
     )
+    scores_by_user_service: dict[tuple[int, int], dict[str, int]] = {}
     for assignment in assignments:
         if assignment.service_id not in active_service_ids:
             continue
@@ -116,6 +150,10 @@ def scoreboard(
         total["attack"] += assignment.attack_score
         total["defense"] += assignment.defense_score
         total["services"] += 1
+        scores_by_user_service[(assignment.user_id, assignment.service_id)] = {
+            "attack": assignment.attack_score,
+            "defense": assignment.defense_score,
+        }
 
     rows = [
         {
@@ -124,6 +162,13 @@ def scoreboard(
             "defense": totals[user_id]["defense"],
             "services": totals[user_id]["services"],
             "score": totals[user_id]["attack"] + totals[user_id]["defense"],
+            "service_scores": [
+                scores_by_user_service.get(
+                    (user_id, service.id),
+                    {"attack": 0, "defense": 0},
+                )
+                for service in active_services
+            ],
         }
         for user_id, participant in participants.items()
     ]
@@ -143,8 +188,212 @@ def scoreboard(
             "title": f"Scoreboard · {branding['brand_title']}",
             "current_user": current_user,
             "rows": rows,
+            "active_services": active_services,
             "active_service_count": len(active_service_ids),
             "csrf_token": get_csrf_token(request) if current_user else None,
             **branding,
         },
+        status_code=status_code,
     )
+
+
+@router.get("/scoreboard", response_class=HTMLResponse)
+def scoreboard(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    return render_scoreboard(request, session)
+
+
+def validate_registration(
+    values: dict[str, str],
+    password: str,
+    password_confirm: str,
+) -> dict[str, str]:
+    errors: dict[str, str] = {}
+    if not USERNAME_PATTERN.fullmatch(values["username"]):
+        errors["username"] = (
+            "Use 3–32 letters, numbers, dots, dashes or underscores."
+        )
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", values["email"]):
+        errors["email"] = "Enter a valid email address."
+    if not 10 <= len(password) <= 128:
+        errors["password"] = "Use between 10 and 128 characters."
+    if password != password_confirm:
+        errors["password_confirm"] = "Passwords do not match."
+    key = values["ssh_public_key"]
+    if not key.startswith(("ssh-", "ecdsa-", "sk-ssh-", "sk-ecdsa-")):
+        errors["ssh_public_key"] = "Enter a valid SSH public key."
+    return errors
+
+
+def render_registration(
+    request: Request,
+    session: Session,
+    *,
+    registration_errors: dict[str, str] | None = None,
+    registration_form: dict[str, str] | None = None,
+    status_code: int = 200,
+):
+    branding = get_branding_context(session)
+    return templates.TemplateResponse(
+        request=request,
+        name="register.html",
+        context={
+            "title": f"Create account · {branding['brand_title']}",
+            "csrf_token": get_csrf_token(request),
+            "registration_errors": registration_errors or {},
+            "registration_form": registration_form or DEFAULT_REGISTRATION_FORM,
+            **branding,
+        },
+        status_code=status_code,
+    )
+
+
+@router.get("/register", response_class=HTMLResponse)
+def registration_page(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    branding = get_branding_context(session)
+    if not branding["is_configured"]:
+        return RedirectResponse(url="/setup", status_code=303)
+    if not branding["registration_enabled"]:
+        raise HTTPException(status_code=404, detail="Registration is disabled.")
+    if get_session_user(request, session):
+        return RedirectResponse(url="/services", status_code=303)
+    return render_registration(request, session)
+
+
+@router.post("/register", response_class=HTMLResponse)
+async def register(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    branding = get_branding_context(session)
+    if not branding["registration_enabled"]:
+        raise HTTPException(status_code=404, detail="Registration is disabled.")
+    if get_session_user(request, session):
+        return RedirectResponse(url="/services", status_code=303)
+
+    form = await request.form()
+    if not csrf_token_is_valid(request, form.get("csrf_token")):
+        return HTMLResponse("Invalid CSRF token.", status_code=403)
+    values = {
+        "username": str(form.get("username", "")).strip(),
+        "email": str(form.get("email", "")).strip().lower(),
+        "ssh_public_key": str(form.get("ssh_public_key", "")).strip(),
+    }
+    password = str(form.get("password", ""))
+    password_confirm = str(form.get("password_confirm", ""))
+    errors = validate_registration(values, password, password_confirm)
+    config = session.get(InstanceConfig, 1)
+    invite_code = str(form.get("invite_code", ""))
+    if (
+        config
+        and config.registration_invite_only
+        and (
+            not config.registration_invite_code_hash
+            or not verify_password(invite_code, config.registration_invite_code_hash)
+        )
+    ):
+        errors["invite_code"] = "Invalid invite code."
+    if session.scalar(select(User.id).where(User.username == values["username"])):
+        errors["username"] = "This username is already in use."
+    if session.scalar(select(User.id).where(User.email == values["email"])):
+        errors["email"] = "This email is already in use."
+    if errors:
+        return render_registration(
+            request,
+            session,
+            registration_errors=errors,
+            registration_form=values,
+            status_code=422,
+        )
+
+    settings = get_gitea_settings()
+    gitea_user = None
+    try:
+        gitea_user = await run_in_threadpool(
+            create_gitea_user,
+            settings,
+            username=values["username"],
+            email=values["email"],
+            password=password,
+        )
+        ssh_key_id = await run_in_threadpool(
+            add_user_ssh_key,
+            settings,
+            username=gitea_user.username,
+            public_key=values["ssh_public_key"],
+        )
+    except (GiteaConflict, GiteaUnavailable) as error:
+        if gitea_user is not None:
+            try:
+                await run_in_threadpool(
+                    delete_gitea_user,
+                    settings,
+                    username=gitea_user.username,
+                )
+            except GiteaError:
+                pass
+        return render_registration(
+            request,
+            session,
+            registration_errors={"_form": str(error)},
+            registration_form=values,
+            status_code=502,
+        )
+
+    user = User(
+        username=values["username"],
+        email=values["email"],
+        password_hash=hash_password(password),
+        ssh_public_key=values["ssh_public_key"],
+        git_ssh_key_id=ssh_key_id,
+        gitea_user_id=gitea_user.id,
+        gitea_username=gitea_user.username,
+    )
+    session.add(user)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        try:
+            await run_in_threadpool(
+                delete_gitea_user,
+                settings,
+                username=gitea_user.username,
+            )
+        except GiteaError:
+            pass
+        return render_registration(
+            request,
+            session,
+            registration_errors={"_form": "The account could not be created."},
+            registration_form=values,
+            status_code=409,
+        )
+
+    active_services = session.scalars(
+        select(Service).where(
+            Service.status == ServiceStatus.ACTIVE,
+            Service.runtime_status == ServiceRunStatus.PASSED,
+        )
+    ).all()
+    for service in active_services:
+        try:
+            assignment = await run_in_threadpool(
+                provision_participant_service,
+                settings,
+                service=service,
+                user=user,
+                webhook_secret=get_gitea_webhook_secret(),
+            )
+        except GiteaError:
+            continue
+        session.add(assignment)
+        session.commit()
+
+    sign_in(request, user)
+    return RedirectResponse(url="/services", status_code=303)

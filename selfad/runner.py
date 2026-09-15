@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import selectors
 import shutil
 import subprocess
@@ -24,6 +25,7 @@ JURY_IMAGE = "python:3.13-alpine"
 MAX_ARCHIVE_FILES = 2_000
 MAX_EXTRACTED_BYTES = 64 * 1024 * 1024
 MAX_COMMAND_OUTPUT = 128 * 1024
+DEFAULT_FLAG_PATTERN = re.compile(r"^[A-Z0-9]{32}$")
 
 
 class RunnerError(Exception):
@@ -39,6 +41,7 @@ class CommandResult:
 @dataclass(frozen=True)
 class RuntimeCheckResult:
     passed: bool
+    functionality_passed: bool
     message: str
     matched_flags: int
     log: str
@@ -112,6 +115,7 @@ def run_service_runtime_check(
         _extract_repository_archive(exploit_archive, exploit_path)
 
         try:
+            functionality_passed = False
             build = _docker(
                 [
                     "build",
@@ -125,6 +129,7 @@ def run_service_runtime_check(
             build_log = build.output
             if build.returncode != 0:
                 return RuntimeCheckResult(
+                    False,
                     False,
                     "Service image build failed.",
                     0,
@@ -172,6 +177,7 @@ def run_service_runtime_check(
             if service.returncode != 0:
                 return RuntimeCheckResult(
                     False,
+                    False,
                     "Service container failed to start.",
                     0,
                     _format_log("docker run", service.output),
@@ -195,6 +201,7 @@ def run_service_runtime_check(
             if injector.returncode != 0:
                 return RuntimeCheckResult(
                     False,
+                    False,
                     "Jury injector failed.",
                     0,
                     _format_log("inject.py", injector.output),
@@ -204,11 +211,13 @@ def run_service_runtime_check(
             if not expected_flags:
                 return RuntimeCheckResult(
                     False,
+                    False,
                     "Jury injector produced no flags on stdout.",
                     0,
                     _format_log("inject.py", injector.output),
                 )
 
+            functionality_passed = True
             exploit = _run_jury_script(
                 container_name=exploit_name,
                 network_name=network_name,
@@ -219,6 +228,7 @@ def run_service_runtime_check(
             if exploit.returncode != 0:
                 return RuntimeCheckResult(
                     False,
+                    True,
                     "Jury exploit failed.",
                     0,
                     _join_logs(injector.output, exploit.output),
@@ -235,6 +245,7 @@ def run_service_runtime_check(
             )
             return RuntimeCheckResult(
                 passed,
+                True,
                 message,
                 matched_flags,
                 _join_logs(injector.output, exploit.output),
@@ -242,6 +253,7 @@ def run_service_runtime_check(
         except RunnerError as error:
             return RuntimeCheckResult(
                 False,
+                functionality_passed,
                 str(error),
                 0,
                 _format_log("build", build_log),
@@ -381,7 +393,7 @@ def _output_tokens(output: str) -> set[str]:
     return {
         line.strip()
         for line in output.splitlines()
-        if line.strip() and len(line.strip()) <= 512
+        if DEFAULT_FLAG_PATTERN.fullmatch(line.strip())
     }
 
 
@@ -403,15 +415,18 @@ def _docker(
     timeout: int,
     max_output: int = MAX_COMMAND_OUTPUT,
 ) -> CommandResult:
-    environment = os.environ.copy()
-    environment["DOCKER_HOST"] = DOCKER_HOST
-    environment["HOME"] = str(DATA_DIR)
-    return _run_command(
-        ["docker", *arguments],
-        timeout=timeout,
-        max_output=max_output,
-        environment=environment,
-    )
+    WORK_DIR.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="docker-cli-", dir=WORK_DIR) as home:
+        environment = os.environ.copy()
+        environment["DOCKER_HOST"] = DOCKER_HOST
+        environment["HOME"] = home
+        environment["DOCKER_CONFIG"] = str(Path(home) / ".docker")
+        return _run_command(
+            ["docker", *arguments],
+            timeout=timeout,
+            max_output=max_output,
+            environment=environment,
+        )
 
 
 def _docker_quiet(arguments: list[str]) -> None:

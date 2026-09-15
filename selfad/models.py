@@ -17,6 +17,18 @@ class InstanceConfig(Base):
         nullable=False,
     )
     setup_complete: Mapped[bool] = mapped_column(default=False, nullable=False)
+    registration_enabled: Mapped[bool] = mapped_column(
+        default=False,
+        nullable=False,
+    )
+    registration_invite_only: Mapped[bool] = mapped_column(
+        default=False,
+        nullable=False,
+    )
+    registration_invite_code_hash: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
 
 
 class BrandingSettings(Base):
@@ -26,6 +38,11 @@ class BrandingSettings(Base):
     change_title: Mapped[bool] = mapped_column(default=False, nullable=False)
     remove_standard_logo: Mapped[bool] = mapped_column(
         default=False,
+        nullable=False,
+    )
+    homepage_html: Mapped[str] = mapped_column(
+        Text,
+        default="",
         nullable=False,
     )
 

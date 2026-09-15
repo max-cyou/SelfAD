@@ -41,6 +41,16 @@
             <p>Manage</p>
             <nav class="admin-section-nav" aria-label="Admin sections" role="tablist" aria-orientation="vertical">
               <button
+                id="admin-tab-general"
+                class="{% if active_section == 'general' %}active{% endif %}"
+                type="button"
+                role="tab"
+                aria-controls="general"
+                aria-selected="{{ 'true' if active_section == 'general' else 'false' }}"
+                tabindex="{{ 0 if active_section == 'general' else -1 }}"
+                data-admin-tab="general"
+              >General</button>
+              <button
                 id="admin-tab-services"
                 class="{% if active_section == 'services' %}active{% endif %}"
                 type="button"
@@ -74,6 +84,55 @@
           </aside>
 
           <div class="admin-content">
+              <section
+                class="admin-panel general-panel"
+                id="general"
+                role="tabpanel"
+                aria-labelledby="admin-tab-general general-title"
+                data-admin-panel="general"
+                {% if active_section != 'general' %}hidden{% endif %}
+              >
+                <div class="panel-heading">
+                  <div>
+                    <h2 id="general-title">General</h2>
+                    <p>Primary settings for this instance.</p>
+                  </div>
+                </div>
+                <form class="general-settings-form" method="post" action="{{ url_for('update_registration') }}">
+                  <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+                  <div class="settings-subsection-title"><span>Registration</span></div>
+                  {% if general_errors.get('registration_invite_code') %}
+                    <p class="general-settings-error" role="alert">{{ general_errors.registration_invite_code }}</p>
+                  {% endif %}
+                  <div class="registration-modes">
+                    <div class="registration-mode">
+                      <label class="general-checkbox">
+                        <input name="registration_enabled" type="checkbox"{% if registration_enabled %} checked{% endif %}>
+                        <span>Enable registration</span>
+                      </label>
+                      <p>Show public registration on the sign-in page.</p>
+                    </div>
+                    <div class="registration-mode registration-mode--invite">
+                      <label class="general-checkbox">
+                        <input name="registration_invite_only" type="checkbox"{% if registration_invite_only %} checked{% endif %}>
+                        <span>Require invite code</span>
+                      </label>
+                      <input
+                        name="registration_invite_code"
+                        type="password"
+                        minlength="4"
+                        maxlength="128"
+                        placeholder="{% if registration_invite_code_configured %}Leave blank to keep current code{% else %}Set invite code{% endif %}"
+                        autocomplete="new-password"
+                      >
+                    </div>
+                  </div>
+                  <div class="general-settings-actions">
+                    <button type="submit">Save settings</button>
+                  </div>
+                </form>
+              </section>
+
               <section
                 class="admin-panel services-panel"
                 id="services"
@@ -292,7 +351,10 @@
                     <tbody>
                       {% for listed_user in users %}
                         <tr>
-                          <td><strong>{{ listed_user.username }}</strong>{% if listed_user.id == current_user.id %}<small>you</small>{% endif %}</td>
+                          <td>
+                            <strong>{{ listed_user.username }}</strong>
+                            {% if listed_user.gitea_username and listed_user.gitea_username != listed_user.username %}<small>Gitea: {{ listed_user.gitea_username }}</small>{% elif listed_user.id == current_user.id %}<small>you</small>{% endif %}
+                          </td>
                           <td><span class="table-role">{{ 'Admin' if listed_user.is_admin else 'User' }}</span></td>
                           <td>{{ listed_user.email }}</td>
                           <td>
@@ -429,6 +491,12 @@
                       <input name="remove_standard_logo" type="checkbox"{% if form_values.remove_standard_logo %} checked{% endif %}>
                       <span>Remove standard logo</span>
                     </label>
+                  </div>
+
+                  <div class="field homepage-html-field{% if errors.get('homepage_html') %} field--error{% endif %}">
+                    <label for="homepage-html">Home page HTML</label>
+                    <textarea id="homepage-html" name="homepage_html" maxlength="20000" rows="10" spellcheck="false" required>{{ form_values.homepage_html }}</textarea>
+                    <small>{{ errors.get('homepage_html') or 'Rendered inside the main block on the public home page.' }}</small>
                   </div>
                 </div>
 

@@ -399,10 +399,25 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
                     player.defense_unlocked = True
                     player.defense_message = "Defense repository unlocked."
         else:
-            matched = runtime.matched_flags if runtime else 100
-            player.defense_status = ParticipantRepositoryStatus.PASSED if matched == 0 else ParticipantRepositoryStatus.FAILED
-            player.defense_score = max(0, 100 - matched)
-            player.defense_message = ("Defense check passed: jury exploit recovered no flags." if matched == 0 else (runtime.message if runtime else error_message))
+            if runtime is None:
+                player.defense_status = ParticipantRepositoryStatus.FAILED
+                player.defense_score = 0
+                player.defense_message = error_message
+            elif not runtime.functionality_passed:
+                player.defense_status = ParticipantRepositoryStatus.FAILED
+                player.defense_score = 0
+                player.defense_message = (
+                    f"Functionality violation: {runtime.message}"
+                )
+            else:
+                matched = runtime.matched_flags
+                player.defense_status = ParticipantRepositoryStatus.PASSED if matched == 0 else ParticipantRepositoryStatus.FAILED
+                player.defense_score = max(0, 100 - matched)
+                player.defense_message = (
+                    "Defense check passed: jury exploit recovered no flags."
+                    if matched == 0
+                    else runtime.message
+                )
         message = player.attack_message if is_attack else player.defense_message
         _finish_events(session, batch.event_ids, RepositoryEventStatus.DONE, message)
         session.commit()

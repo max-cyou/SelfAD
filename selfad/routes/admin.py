@@ -106,7 +106,8 @@ def render_admin(
     participant_errors: dict[str, str] | None = None,
     participant_form: dict[str, str] | None = None,
     user_edit_id: int | None = None,
-    active_section: str = "services",
+    general_errors: dict[str, str] | None = None,
+    active_section: str = "general",
     status_code: int = 200,
 ):
     branding = get_branding_context(session)
@@ -114,6 +115,7 @@ def render_admin(
         "site_name": branding["site_name"],
         "change_title": branding["change_title"],
         "remove_standard_logo": branding["remove_standard_logo"],
+        "homepage_html": branding["homepage_html"],
         **branding["palette_values"],
     }
     if form_values:
@@ -174,6 +176,7 @@ def render_admin(
             "participant_errors": participant_errors or {},
             "participant_form": participant_form or DEFAULT_PARTICIPANT_FORM,
             "user_edit_id": user_edit_id,
+            "general_errors": general_errors or {},
             "ssh_key_required": not bool(user.ssh_public_key),
             "gitea_configured": gitea_settings.configured,
             "gitea_public_url": gitea_settings.public_url,
@@ -364,7 +367,7 @@ def admin_page(
         session,
         user,
         saved=saved,
-        active_section="appearance" if saved else "services",
+        active_section="appearance" if saved else "general",
     )
 
 
@@ -950,6 +953,7 @@ async def update_appearance(
         return HTMLResponse("Invalid CSRF token.", status_code=403)
 
     site_name = str(form.get("site_name", "")).strip()
+    homepage_html = str(form.get("homepage_html", "")).strip()
     palette_values = {
         name: str(form.get(name, "")).strip().upper()
         for name in PALETTE_FIELDS
@@ -957,6 +961,10 @@ async def update_appearance(
     errors: dict[str, str] = {}
     if not 2 <= len(site_name) <= 120:
         errors["site_name"] = "Use between 2 and 120 characters."
+    if not homepage_html:
+        errors["homepage_html"] = "Home page HTML cannot be empty."
+    elif len(homepage_html) > 20_000:
+        errors["homepage_html"] = "Use no more than 20,000 characters."
 
     for name, value in palette_values.items():
         if not HEX_COLOR_PATTERN.fullmatch(value):
@@ -966,6 +974,7 @@ async def update_appearance(
         "site_name": site_name,
         "change_title": form.get("change_title") == "on",
         "remove_standard_logo": form.get("remove_standard_logo") == "on",
+        "homepage_html": homepage_html,
         **palette_values,
     }
     if errors:
@@ -992,6 +1001,7 @@ async def update_appearance(
     branding.remove_standard_logo = bool(
         form_values["remove_standard_logo"]
     )
+    branding.homepage_html = homepage_html
     for name, value in palette_values.items():
         setattr(palette, name, value)
 
@@ -999,3 +1009,45 @@ async def update_appearance(
     session.commit()
 
     return RedirectResponse(url="/admin?saved=true#appearance", status_code=303)
+
+
+@router.post("/admin/registration", response_class=HTMLResponse)
+async def update_registration(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    user, redirect = get_admin_access(request, session)
+    if redirect:
+        return redirect
+    form = await request.form()
+    if not csrf_token_is_valid(request, form.get("csrf_token")):
+        return HTMLResponse("Invalid CSRF token.", status_code=403)
+
+    config = session.get(InstanceConfig, 1)
+    if config is None:
+        return RedirectResponse(url="/setup", status_code=303)
+
+    registration_enabled = form.get("registration_enabled") == "on"
+    invite_only = form.get("registration_invite_only") == "on"
+    invite_code = str(form.get("registration_invite_code", "")).strip()
+    errors: dict[str, str] = {}
+    if invite_code and not 4 <= len(invite_code) <= 128:
+        errors["registration_invite_code"] = "Use between 4 and 128 characters."
+    if invite_only and not invite_code and not config.registration_invite_code_hash:
+        errors["registration_invite_code"] = "Set an invite code first."
+    if errors:
+        return render_admin(
+            request,
+            session,
+            user,
+            general_errors=errors,
+            active_section="general",
+            status_code=422,
+        )
+
+    config.registration_enabled = registration_enabled
+    config.registration_invite_only = invite_only
+    if invite_code:
+        config.registration_invite_code_hash = hash_password(invite_code)
+    session.commit()
+    return RedirectResponse(url="/admin#general", status_code=303)

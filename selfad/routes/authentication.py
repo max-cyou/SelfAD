@@ -1,19 +1,18 @@
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from selfad.auth import csrf_token_is_valid, get_session_user, sign_in, sign_out
 from selfad.branding import get_branding_context
 from selfad.database import get_session
+from selfad.gitea import GiteaUnavailable, authenticate_gitea_user
 from selfad.models import User
-from selfad.security import hash_password, verify_password
+from selfad.settings import get_gitea_settings
 from selfad.web import templates
 
 
 router = APIRouter()
-
-DUMMY_PASSWORD_HASH = hash_password("invalid-password-placeholder")
 
 
 def render_login(
@@ -69,11 +68,32 @@ def submit_login(
         return RedirectResponse(url="/setup", status_code=303)
 
     username = username.strip()
-    user = session.scalar(select(User).where(User.username == username))
-    password_hash = user.password_hash if user else DUMMY_PASSWORD_HASH
-    password_is_valid = verify_password(password, password_hash)
+    try:
+        gitea_user = authenticate_gitea_user(
+            get_gitea_settings(),
+            username=username,
+            password=password,
+        )
+    except GiteaUnavailable:
+        return render_login(
+            request,
+            session,
+            username=username,
+            error="Gitea authentication is temporarily unavailable.",
+            status_code=503,
+        )
 
-    if not user or not password_is_valid:
+    user = None
+    if gitea_user:
+        user = session.scalar(
+            select(User).where(
+                or_(
+                    User.gitea_user_id == gitea_user.id,
+                    User.gitea_username == gitea_user.username,
+                )
+            )
+        )
+    if user is None:
         return render_login(
             request,
             session,
@@ -81,6 +101,14 @@ def submit_login(
             error="Invalid username or password.",
             status_code=401,
         )
+
+    if (
+        user.gitea_user_id != gitea_user.id
+        or user.gitea_username != gitea_user.username
+    ):
+        user.gitea_user_id = gitea_user.id
+        user.gitea_username = gitea_user.username
+        session.commit()
 
     sign_in(request, user)
     return RedirectResponse(

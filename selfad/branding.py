@@ -1,4 +1,5 @@
 import re
+from html import escape
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
@@ -43,6 +44,18 @@ PALETTE_FIELDS = {
 }
 
 
+def default_homepage_html(site_name: str) -> str:
+    safe_name = escape(site_name)
+    return (
+        f"<h1>{safe_name}</h1>\n"
+        '<div class="home-actions">\n'
+        '  <a class="home-scoreboard-link" href="/scoreboard">Scoreboard →</a>\n'
+        '  <a class="primary-link" href="/services">Go to services</a>\n'
+        '  <small class="home-powered-by">Powered on SelfAD</small>\n'
+        "</div>"
+    )
+
+
 def get_palette_values(palette: PaletteSettings | None) -> dict[str, str]:
     values: dict[str, str] = {}
     for name, field in PALETTE_FIELDS.items():
@@ -63,6 +76,12 @@ def get_branding_context(session: Session) -> dict[str, object]:
     branding = session.get(BrandingSettings, 1)
     palette = session.get(PaletteSettings, 1)
     is_configured = bool(config and config.setup_complete)
+    registration_enabled = bool(
+        is_configured and config and config.registration_enabled
+    )
+    registration_invite_only = bool(
+        config and config.registration_invite_only
+    )
     change_title = bool(
         is_configured and branding and branding.change_title
     )
@@ -73,6 +92,8 @@ def get_branding_context(session: Session) -> dict[str, object]:
     brand_title = site_name if change_title else "SelfAD"
     show_standard_logo = not remove_standard_logo
     palette_values = get_palette_values(palette)
+    stored_homepage_html = branding.homepage_html if branding else ""
+    homepage_html = stored_homepage_html or default_homepage_html(site_name)
 
     return {
         "site_name": site_name,
@@ -81,6 +102,12 @@ def get_branding_context(session: Session) -> dict[str, object]:
         "remove_standard_logo": remove_standard_logo,
         "show_standard_logo": show_standard_logo,
         "is_configured": is_configured,
+        "registration_enabled": registration_enabled,
+        "registration_invite_only": registration_invite_only,
+        "registration_invite_code_configured": bool(
+            config and config.registration_invite_code_hash
+        ),
+        "homepage_html": homepage_html,
         "palette_values": palette_values,
         "palette_style": build_palette_style(palette_values),
     }

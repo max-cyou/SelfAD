@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Create a SelfAD account.">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v={{ static_version('app.css') }}">
+  </head>
+  <body style="{{ palette_style }}">
+    <div class="page">
+      <header class="site-header">
+        <a class="logo" href="/" aria-label="SelfAD home">
+          {% if show_standard_logo %}<img class="logo-mark" src="{{ url_for('static', path='/logo.svg') }}?v={{ static_version('logo.svg') }}" alt="">{% endif %}
+          <span class="logo-text">{{ brand_title }}</span>
+        </a>
+        <nav aria-label="Main navigation">
+          <a href="/admin">Admin panel</a>
+          <a href="/services">Services</a>
+          <a href="/scoreboard">Scoreboard</a>
+        </nav>
+      </header>
+
+      <main class="auth-main">
+        <section class="registration-card registration-page" aria-labelledby="registration-title">
+          <div class="registration-heading">
+            <h1 id="registration-title">Create account</h1>
+            <p>Your username and password will also be used for Gitea.{% if registration_invite_only %} An invite code is required.{% endif %}</p>
+          </div>
+          {% if registration_errors.get('_form') %}<p class="registration-error" role="alert">{{ registration_errors['_form'] }}</p>{% endif %}
+          <form class="registration-form" method="post" action="{{ url_for('register') }}">
+            <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+            <div class="field{% if registration_errors.get('username') %} field--error{% endif %}">
+              <label for="register-username">Username</label>
+              <input id="register-username" name="username" value="{{ registration_form.username }}" minlength="3" maxlength="32" autocomplete="username" required autofocus>
+              {% if registration_errors.get('username') %}<small>{{ registration_errors.username }}</small>{% endif %}
+            </div>
+            <div class="field{% if registration_errors.get('email') %} field--error{% endif %}">
+              <label for="register-email">Email</label>
+              <input id="register-email" name="email" type="email" value="{{ registration_form.email }}" autocomplete="email" required>
+              {% if registration_errors.get('email') %}<small>{{ registration_errors.email }}</small>{% endif %}
+            </div>
+            <div class="field{% if registration_errors.get('password') %} field--error{% endif %}">
+              <label for="register-password">Password</label>
+              <input id="register-password" name="password" type="password" minlength="10" autocomplete="new-password" required>
+              {% if registration_errors.get('password') %}<small>{{ registration_errors.password }}</small>{% endif %}
+            </div>
+            <div class="field{% if registration_errors.get('password_confirm') %} field--error{% endif %}">
+              <label for="register-password-confirm">Repeat password</label>
+              <input id="register-password-confirm" name="password_confirm" type="password" minlength="10" autocomplete="new-password" required>
+              {% if registration_errors.get('password_confirm') %}<small>{{ registration_errors.password_confirm }}</small>{% endif %}
+            </div>
+            {% if registration_invite_only %}
+              <div class="field registration-invite{% if registration_errors.get('invite_code') %} field--error{% endif %}">
+                <label for="register-invite">Invite code</label>
+                <input id="register-invite" name="invite_code" type="password" autocomplete="one-time-code" required>
+                {% if registration_errors.get('invite_code') %}<small>{{ registration_errors.invite_code }}</small>{% endif %}
+              </div>
+            {% endif %}
+            <div class="field registration-key{% if registration_errors.get('ssh_public_key') %} field--error{% endif %}">
+              <label for="register-key">SSH public key</label>
+              <textarea id="register-key" name="ssh_public_key" rows="3" maxlength="2048" placeholder="ssh-ed25519 AAAA..." spellcheck="false" required>{{ registration_form.ssh_public_key }}</textarea>
+              <small>{{ registration_errors.get('ssh_public_key') or 'Only your public key. It is used for Git push access.' }}</small>
+            </div>
+            <div class="registration-actions">
+              <button type="submit">Create account</button>
+              <a class="auth-switch-link" href="/login">Sign in →</a>
+            </div>
+          </form>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

@@ -53,6 +53,32 @@ def _migrate_existing_sqlite_schema() -> None:
     added_columns: set[str] = set()
 
     with engine.begin() as connection:
+        instance_config_columns = {
+            column["name"]
+            for column in schema.get_columns("instance_config")
+        }
+        if "registration_enabled" not in instance_config_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE instance_config ADD COLUMN "
+                    "registration_enabled BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+        if "registration_invite_only" not in instance_config_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE instance_config ADD COLUMN "
+                    "registration_invite_only BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+        if "registration_invite_code_hash" not in instance_config_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE instance_config ADD COLUMN "
+                    "registration_invite_code_hash VARCHAR(255)"
+                )
+            )
+
         service_columns = {
             column["name"] for column in schema.get_columns("services")
         }
@@ -134,6 +160,17 @@ def _migrate_existing_sqlite_schema() -> None:
         if "gitea_username" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN gitea_username VARCHAR(32)"))
             added_columns.add("users.gitea_username")
+
+        branding_columns = {
+            column["name"] for column in schema.get_columns("branding_settings")
+        }
+        if "homepage_html" not in branding_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE branding_settings "
+                    "ADD COLUMN homepage_html TEXT NOT NULL DEFAULT ''"
+                )
+            )
 
         repository_event_columns = {
             column["name"]

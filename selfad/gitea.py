@@ -367,6 +367,46 @@ def get_authenticated_user(settings: GiteaSettings) -> GiteaUser:
     return GiteaUser(user_id, username)
 
 
+def authenticate_gitea_user(
+    settings: GiteaSettings,
+    *,
+    username: str,
+    password: str,
+) -> GiteaUser | None:
+    credentials = base64.b64encode(
+        f"{username}:{password}".encode("utf-8")
+    ).decode("ascii")
+    request = Request(
+        f"{settings.internal_url}/api/v1/user",
+        method="GET",
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Basic {credentials}",
+        },
+    )
+    context = None
+    if not settings.verify_tls:
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+
+    try:
+        with urlopen(request, timeout=8, context=context) as response:
+            payload = json.loads(response.read())
+    except HTTPError as error:
+        if error.code in {401, 403}:
+            return None
+        raise GiteaUnavailable("Gitea authentication is unavailable.") from error
+    except (URLError, TimeoutError, json.JSONDecodeError) as error:
+        raise GiteaUnavailable("Gitea authentication is unavailable.") from error
+
+    user_id = payload.get("id") if isinstance(payload, dict) else None
+    returned_username = payload.get("login") if isinstance(payload, dict) else None
+    if not isinstance(user_id, int) or not isinstance(returned_username, str):
+        raise GiteaUnavailable("Gitea returned an invalid user response.")
+    return GiteaUser(user_id, returned_username)
+
+
 def update_gitea_user(
     settings: GiteaSettings,
     *,
