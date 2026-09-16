@@ -10,6 +10,7 @@ from selfad.gitea import (
     list_repository_files,
 )
 from selfad.models import ParticipantService, Service, User
+from selfad.repository_readmes import attack_readme, defense_readme
 from selfad.settings import GiteaSettings
 
 
@@ -37,11 +38,35 @@ def provision_participant_service(
     attack = create_repository(settings, path=attack_name, description=f"SelfAD attack repository for {service.name}.", default_branch=service.default_branch)
     defense = create_repository(settings, path=defense_name, description=f"SelfAD defense repository for {service.name}.", default_branch=service.default_branch)
     try:
-        for path, content in (("Dockerfile", ATTACK_DOCKERFILE), ("exploit.py", ATTACK_EXPLOIT)):
+        attack_files = (
+            ("README.md", attack_readme(service.name, service.default_branch)),
+            ("Dockerfile", ATTACK_DOCKERFILE),
+            ("exploit.py", ATTACK_EXPLOIT),
+        )
+        for path, content in attack_files:
             create_repository_file(settings, attack.path, path, content=content, branch=service.default_branch, message="Initialize SelfAD attack repository")
 
         source_files = list_repository_files(settings, service.repository_path, ref=service.runtime_source_commit)
+        original_readme = None
+        if "README.md" in source_files:
+            original_readme = get_repository_file(
+                settings,
+                service.repository_path,
+                "README.md",
+                ref=service.runtime_source_commit,
+                max_bytes=256 * 1024,
+            )
+        create_repository_file(
+            settings,
+            defense.path,
+            "README.md",
+            content=defense_readme(service.name, service.default_branch, original_readme),
+            branch=service.default_branch,
+            message="Add defense instructions",
+        )
         for path in source_files:
+            if path == "README.md":
+                continue
             content = get_repository_file(settings, service.repository_path, path, ref=service.runtime_source_commit, max_bytes=256 * 1024)
             if content is None:
                 raise GiteaError(f"Could not copy {path} into the defense repository.")

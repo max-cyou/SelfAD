@@ -78,6 +78,20 @@ def validate_service_contract(
             ref=jury_commit,
             max_bytes=MAX_SOURCE_BYTES,
         )
+        checker = get_repository_file(
+            settings,
+            jury_repository_path,
+            "checker.py",
+            ref=jury_commit,
+            max_bytes=MAX_SOURCE_BYTES,
+        )
+        requirements = get_repository_file(
+            settings,
+            jury_repository_path,
+            "requirements.txt",
+            ref=jury_commit,
+            max_bytes=MAX_CONFIG_BYTES,
+        )
     except GiteaFileTooLarge as error:
         return _failed(str(error), source_commit, jury_commit)
 
@@ -102,6 +116,10 @@ def validate_service_contract(
     _validate_dockerfile(dockerfile, errors)
     _validate_python_script(injector, "jury/inject.py", errors)
     _validate_python_script(exploit, "jury/exploit.py", errors)
+    if checker is not None:
+        _validate_python_script(checker, "jury/checker.py", errors)
+    if requirements is not None:
+        _decode_text(requirements, "jury/requirements.txt", errors)
     container_port, healthcheck_path = _validate_config(config_file, errors)
     if errors:
         return _failed(" ".join(errors), source_commit, jury_commit)

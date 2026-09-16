@@ -7,6 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from selfad.repository_readmes import jury_readme, organizer_readme
 from selfad.settings import GiteaSettings
 
 
@@ -725,11 +726,27 @@ def provision_service(
     )
     jury_repository: GiteaRepository | None = None
     try:
+        create_repository_file(
+            settings,
+            service_repository.path,
+            "README.md",
+            content=organizer_readme(name, default_branch),
+            branch=default_branch,
+            message="Add service author instructions",
+        )
         jury_repository = create_repository(
             settings,
             path=f"{slug}-jury",
             description=f"Private SelfAD jury files for {name}.",
             default_branch=default_branch,
+        )
+        create_repository_file(
+            settings,
+            jury_repository.path,
+            "README.md",
+            content=jury_readme(name, default_branch),
+            branch=default_branch,
+            message="Add jury instructions",
         )
         ensure_repository_webhook(
             settings,

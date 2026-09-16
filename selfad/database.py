@@ -43,6 +43,10 @@ def initialize_database() -> None:
 
     Base.metadata.create_all(bind=engine)
     _migrate_existing_sqlite_schema()
+    with SessionLocal() as session:
+        if session.get(_models.ScoringSettings, 1) is None:
+            session.add(_models.ScoringSettings(id=1))
+            session.commit()
 
 
 def _migrate_existing_sqlite_schema() -> None:
@@ -83,6 +87,13 @@ def _migrate_existing_sqlite_schema() -> None:
                 text(
                     "ALTER TABLE instance_config ADD COLUMN "
                     "contest_started BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+        if "contest_ended" not in instance_config_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE instance_config ADD COLUMN "
+                    "contest_ended BOOLEAN NOT NULL DEFAULT 0"
                 )
             )
         if "contest_starts_at" not in instance_config_columns:
@@ -192,6 +203,13 @@ def _migrate_existing_sqlite_schema() -> None:
                     "ADD COLUMN started_homepage_html TEXT NOT NULL DEFAULT ''"
                 )
             )
+        if "ended_homepage_html" not in branding_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE branding_settings "
+                    "ADD COLUMN ended_homepage_html TEXT NOT NULL DEFAULT ''"
+                )
+            )
 
         palette_columns = {
             column["name"] for column in schema.get_columns("palette_settings")
@@ -247,6 +265,25 @@ def _migrate_existing_sqlite_schema() -> None:
                         f"ADD COLUMN {column_name} {column_type}"
                     )
                 )
+
+        scoring_columns = {
+            column["name"] for column in schema.get_columns("scoring_settings")
+        }
+        if "attack_requirements" not in scoring_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE scoring_settings "
+                    "ADD COLUMN attack_requirements TEXT NOT NULL DEFAULT ''"
+                )
+            )
+        if "allow_user_attack_requirements" not in scoring_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE scoring_settings "
+                    "ADD COLUMN allow_user_attack_requirements "
+                    "BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
 
         if "services.repository_id" in added_columns:
             connection.execute(

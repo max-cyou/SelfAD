@@ -18,6 +18,7 @@ class InstanceConfig(Base):
     )
     setup_complete: Mapped[bool] = mapped_column(default=False, nullable=False)
     contest_started: Mapped[bool] = mapped_column(default=False, nullable=False)
+    contest_ended: Mapped[bool] = mapped_column(default=False, nullable=False)
     contest_starts_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -51,6 +52,11 @@ class BrandingSettings(Base):
         nullable=False,
     )
     started_homepage_html: Mapped[str] = mapped_column(
+        Text,
+        default="",
+        nullable=False,
+    )
+    ended_homepage_html: Mapped[str] = mapped_column(
         Text,
         default="",
         nullable=False,
@@ -129,6 +135,42 @@ class ParticipantRepositoryStatus(str, Enum):
     RUNNING = "running"
     PASSED = "passed"
     FAILED = "failed"
+
+
+class ScoringSettings(Base):
+    __tablename__ = "scoring_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    attack_reward_mode: Mapped[str] = mapped_column(
+        String(16), default="coverage", nullable=False
+    )
+    attack_max_points: Mapped[int] = mapped_column(default=100, nullable=False)
+    attack_points_per_flag: Mapped[int] = mapped_column(default=10, nullable=False)
+    defense_reward_mode: Mapped[str] = mapped_column(
+        String(16), default="per_flag", nullable=False
+    )
+    defense_max_points: Mapped[int] = mapped_column(default=100, nullable=False)
+    defense_points_lost_per_flag: Mapped[int] = mapped_column(
+        default=10, nullable=False
+    )
+    penalty_mode: Mapped[str] = mapped_column(
+        String(16), default="percent", nullable=False
+    )
+    attack_penalty_value: Mapped[float] = mapped_column(
+        default=5.0, nullable=False
+    )
+    defense_penalty_value: Mapped[float] = mapped_column(
+        default=5.0, nullable=False
+    )
+    attack_free_failures: Mapped[int] = mapped_column(default=0, nullable=False)
+    defense_free_failures: Mapped[int] = mapped_column(default=0, nullable=False)
+    penalize_check_errors: Mapped[bool] = mapped_column(default=True, nullable=False)
+    attack_requirements: Mapped[str] = mapped_column(
+        Text, default="", nullable=False
+    )
+    allow_user_attack_requirements: Mapped[bool] = mapped_column(
+        default=False, nullable=False
+    )
 
 
 class Service(Base):
@@ -377,3 +419,29 @@ class ParticipantService(Base):
     defense_message: Mapped[str] = mapped_column(Text, default="Unlocks after a successful exploit.", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class SubmissionAttempt(Base):
+    __tablename__ = "submission_attempts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    participant_service_id: Mapped[int] = mapped_column(index=True, nullable=False)
+    repository_path: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(8), index=True, nullable=False)
+    commit_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempt_number: Mapped[int] = mapped_column(nullable=False)
+    matched_flags: Mapped[int] = mapped_column(default=0, nullable=False)
+    injected_flags: Mapped[int] = mapped_column(default=0, nullable=False)
+    functionality_passed: Mapped[bool] = mapped_column(default=False, nullable=False)
+    completed: Mapped[bool] = mapped_column(default=False, nullable=False)
+    improved: Mapped[bool] = mapped_column(default=False, nullable=False)
+    penalty_eligible: Mapped[bool] = mapped_column(default=False, nullable=False)
+    raw_score: Mapped[int] = mapped_column(default=0, nullable=False)
+    penalty: Mapped[int] = mapped_column(default=0, nullable=False)
+    awarded_score: Mapped[int] = mapped_column(default=0, nullable=False)
+    message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )

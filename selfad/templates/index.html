@@ -12,7 +12,13 @@
       {% include "_header.html" %}
 
       <main class="home-main">
-        {{ (started_homepage_html if contest_started else not_started_homepage_html) | safe }}
+        {% if contest_state == 'started' %}
+          {{ started_homepage_html | safe }}
+        {% elif contest_state == 'ended' %}
+          {{ ended_homepage_html | safe }}
+        {% else %}
+          {{ not_started_homepage_html | safe }}
+        {% endif %}
       </main>
       {% include "_footer.html" %}
     </div>

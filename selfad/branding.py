@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
+from selfad.contest import ENDED, STARTED, contest_state
 from selfad.models import BrandingSettings, InstanceConfig, PaletteSettings
 
 
@@ -89,7 +90,6 @@ def default_not_started_homepage_html(site_name: str) -> str:
         "<p>Has not started yet!</p>\n"
         '<nav class="home-links" aria-label="Contest links">\n'
         f'  <a href="/login"><span>Login / register</span>{HOME_ARROW_SVG}</a>\n'
-        f'  <a href="/scoreboard"><span>Scoreboard</span>{HOME_ARROW_SVG}</a>\n'
         "</nav>"
     )
 
@@ -101,6 +101,17 @@ def default_started_homepage_html(site_name: str) -> str:
         "<p>Contest is started</p>\n"
         '<nav class="home-links" aria-label="Contest links">\n'
         f'  <a href="/services"><span>Services</span>{HOME_ARROW_SVG}</a>\n'
+        f'  <a href="/scoreboard"><span>Scoreboard</span>{HOME_ARROW_SVG}</a>\n'
+        "</nav>"
+    )
+
+
+def default_ended_homepage_html(site_name: str) -> str:
+    safe_name = escape(site_name)
+    return (
+        f"<h1>{safe_name}</h1>\n"
+        "<p>Contest has ended</p>\n"
+        '<nav class="home-links" aria-label="Contest links">\n'
         f'  <a href="/scoreboard"><span>Scoreboard</span>{HOME_ARROW_SVG}</a>\n'
         "</nav>"
     )
@@ -144,12 +155,17 @@ def get_branding_context(session: Session) -> dict[str, object]:
     palette_values = get_palette_values(palette)
     stored_not_started_html = branding.homepage_html if branding else ""
     stored_started_html = branding.started_homepage_html if branding else ""
+    stored_ended_html = branding.ended_homepage_html if branding else ""
     not_started_homepage_html = (
         stored_not_started_html or default_not_started_homepage_html(site_name)
     )
     started_homepage_html = (
         stored_started_html or default_started_homepage_html(site_name)
     )
+    ended_homepage_html = (
+        stored_ended_html or default_ended_homepage_html(site_name)
+    )
+    current_contest_state = contest_state(config)
 
     return {
         "site_name": site_name,
@@ -163,8 +179,12 @@ def get_branding_context(session: Session) -> dict[str, object]:
         "registration_invite_code_configured": bool(
             config and config.registration_invite_code_hash
         ),
+        "contest_state": current_contest_state,
+        "contest_started": current_contest_state == STARTED,
+        "contest_ended": current_contest_state == ENDED,
         "not_started_homepage_html": not_started_homepage_html,
         "started_homepage_html": started_homepage_html,
+        "ended_homepage_html": ended_homepage_html,
         "palette_values": palette_values,
         "palette_style": build_palette_style(palette_values),
     }

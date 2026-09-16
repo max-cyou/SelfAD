@@ -15,6 +15,7 @@ from selfad.auth import (
     sign_in,
 )
 from selfad.branding import get_branding_context
+from selfad.contest import ENDED, STARTED, contest_state, start_contest_if_due
 from selfad.database import get_session
 from selfad.gitea import (
     GiteaConflict,
@@ -26,6 +27,7 @@ from selfad.gitea import (
 )
 from selfad.models import (
     InstanceConfig,
+    ParticipantRepositoryStatus,
     ParticipantService,
     Service,
     ServiceRunStatus,
@@ -58,6 +60,11 @@ def participant_access(
     user = get_session_user(request, session)
     if user is None:
         return None, RedirectResponse(url="/login", status_code=303)
+    config = session.get(InstanceConfig, 1)
+    if start_contest_if_due(config):
+        session.commit()
+    if not user.is_admin and contest_state(config) != STARTED:
+        return None, RedirectResponse(url="/", status_code=303)
     return user, None
 
 
@@ -99,6 +106,11 @@ def participant_services(
         }
         for assignment, service in assignments
     ]
+    has_checking = any(
+        assignment.attack_status == ParticipantRepositoryStatus.RUNNING
+        or assignment.defense_status == ParticipantRepositoryStatus.RUNNING
+        for assignment, _ in assignments
+    )
 
     return templates.TemplateResponse(
         request=request,
@@ -107,6 +119,7 @@ def participant_services(
             "title": f"Services · {branding['brand_title']}",
             "current_user": user,
             "cards": cards,
+            "has_checking": has_checking,
             "csrf_token": get_csrf_token(request),
             **branding,
         },
@@ -171,6 +184,7 @@ def render_scoreboard(
             ],
         }
         for user_id, participant in participants.items()
+        if totals[user_id]["attack"] + totals[user_id]["defense"] >= 1
     ]
     rows.sort(key=lambda row: (-row["score"], -row["attack"], row["username"]))
     previous_score: int | None = None
@@ -202,6 +216,15 @@ def scoreboard(
     request: Request,
     session: Session = Depends(get_session),
 ):
+    config = session.get(InstanceConfig, 1)
+    if start_contest_if_due(config):
+        session.commit()
+    current_user = get_session_user(request, session)
+    if (
+        contest_state(config) not in {STARTED, ENDED}
+        and not (current_user and current_user.is_admin)
+    ):
+        return RedirectResponse(url="/", status_code=303)
     return render_scoreboard(request, session)
 
 
@@ -260,8 +283,14 @@ def registration_page(
         return RedirectResponse(url="/setup", status_code=303)
     if not branding["registration_enabled"]:
         raise HTTPException(status_code=404, detail="Registration is disabled.")
+    config = session.get(InstanceConfig, 1)
+    if contest_state(config) == ENDED:
+        raise HTTPException(status_code=404, detail="Registration is closed.")
     if get_session_user(request, session):
-        return RedirectResponse(url="/services", status_code=303)
+        return RedirectResponse(
+            url="/services" if contest_state(config) == STARTED else "/",
+            status_code=303,
+        )
     return render_registration(request, session)
 
 
@@ -273,8 +302,14 @@ async def register(
     branding = get_branding_context(session)
     if not branding["registration_enabled"]:
         raise HTTPException(status_code=404, detail="Registration is disabled.")
+    config = session.get(InstanceConfig, 1)
+    if contest_state(config) == ENDED:
+        raise HTTPException(status_code=404, detail="Registration is closed.")
     if get_session_user(request, session):
-        return RedirectResponse(url="/services", status_code=303)
+        return RedirectResponse(
+            url="/services" if contest_state(config) == STARTED else "/",
+            status_code=303,
+        )
 
     form = await request.form()
     if not csrf_token_is_valid(request, form.get("csrf_token")):
@@ -287,7 +322,6 @@ async def register(
     password = str(form.get("password", ""))
     password_confirm = str(form.get("password_confirm", ""))
     errors = validate_registration(values, password, password_confirm)
-    config = session.get(InstanceConfig, 1)
     invite_code = str(form.get("invite_code", ""))
     if (
         config
@@ -396,4 +430,7 @@ async def register(
         session.commit()
 
     sign_in(request, user)
-    return RedirectResponse(url="/services", status_code=303)
+    return RedirectResponse(
+        url="/services" if contest_state(config) == STARTED else "/",
+        status_code=303,
+    )

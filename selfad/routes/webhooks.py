@@ -9,10 +9,13 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from selfad.contest import STARTED, contest_state, start_contest_if_due
 from selfad.database import get_session
 from selfad.models import (
+    InstanceConfig,
     RepositoryEvent,
     ParticipantService,
+    ParticipantRepositoryStatus,
     Service,
     ServiceRunStatus,
     ServiceStatus,
@@ -121,6 +124,20 @@ async def receive_gitea_webhook(
             return webhook_response("Repository ignored.", 202)
         if ref != f"refs/heads/{service.default_branch}":
             return webhook_response("Branch ignored.", 202)
+        config = session.get(InstanceConfig, 1)
+        if start_contest_if_due(config):
+            session.commit()
+        if contest_state(config) != STARTED:
+            return webhook_response(
+                "Participant push ignored: the contest is not running.",
+                202,
+            )
+        if repository_path == participant_service.attack_repository_path:
+            participant_service.attack_status = ParticipantRepositoryStatus.RUNNING
+            participant_service.attack_message = "Push queued for checking."
+        else:
+            participant_service.defense_status = ParticipantRepositoryStatus.RUNNING
+            participant_service.defense_message = "Push queued for checking."
         session.add(RepositoryEvent(delivery_id=delivery_id, repository_path=repository_path, ref=ref, commit_sha=commit_sha.lower()))
         try:
             session.commit()

@@ -16,7 +16,14 @@ from selfad.branding import (
     PALETTE_GROUPS,
     get_branding_context,
 )
-from selfad.contest import as_utc, start_contest_if_due
+from selfad.contest import (
+    CONTEST_STATES,
+    ENDED,
+    STARTED,
+    as_utc,
+    contest_state,
+    start_contest_if_due,
+)
 from selfad.database import get_session
 from selfad.gitea import (
     GiteaConflict,
@@ -45,6 +52,7 @@ from selfad.models import (
     User,
 )
 from selfad.participants import provision_participant_service
+from selfad.scoring import PENALTY_MODES, REWARD_MODES, get_scoring_settings
 from selfad.security import hash_password
 from selfad.service_contract import (
     ServiceContractResult,
@@ -63,6 +71,7 @@ router = APIRouter()
 SERVICE_SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$")
 USERS_PAGE_SIZE = 20
+MAX_ATTACK_REQUIREMENTS_BYTES = 64 * 1024
 
 DEFAULT_SERVICE_FORM = {
     "name": "",
@@ -80,12 +89,85 @@ DEFAULT_PARTICIPANT_FORM = {
     "role": "user",
 }
 
+SCORING_INTEGER_FIELDS = {
+    "attack_max_points": (1, 1_000_000),
+    "attack_points_per_flag": (0, 1_000_000),
+    "defense_max_points": (1, 1_000_000),
+    "defense_points_lost_per_flag": (0, 1_000_000),
+    "attack_free_failures": (0, 10_000),
+    "defense_free_failures": (0, 10_000),
+}
+
+
+def parse_scoring_form(form) -> tuple[dict[str, object], dict[str, str]]:
+    values: dict[str, object] = {
+        "attack_reward_mode": str(
+            form.get("attack_reward_mode", "coverage")
+        ).strip(),
+        "defense_reward_mode": str(
+            form.get("defense_reward_mode", "per_flag")
+        ).strip(),
+        "penalty_mode": str(form.get("penalty_mode", "percent")).strip(),
+        "penalize_check_errors": form.get("penalize_check_errors") == "on",
+        "attack_requirements": str(form.get("attack_requirements", "")),
+        "allow_user_attack_requirements": (
+            form.get("allow_user_attack_requirements") == "on"
+        ),
+    }
+    errors: dict[str, str] = {}
+    if values["attack_reward_mode"] not in REWARD_MODES:
+        errors["attack_reward_mode"] = "Choose a valid reward mode."
+    if values["defense_reward_mode"] not in REWARD_MODES:
+        errors["defense_reward_mode"] = "Choose a valid reward mode."
+    if values["penalty_mode"] not in PENALTY_MODES:
+        errors["penalty_mode"] = "Choose a valid penalty mode."
+
+    for name, (minimum, maximum) in SCORING_INTEGER_FIELDS.items():
+        raw_value = str(form.get(name, "")).strip()
+        values[name] = raw_value
+        try:
+            parsed = int(raw_value)
+            if not minimum <= parsed <= maximum:
+                raise ValueError
+        except ValueError:
+            errors[name] = f"Use a whole number from {minimum} to {maximum}."
+        else:
+            values[name] = parsed
+
+    penalty_maximum = (
+        100
+        if values["penalty_mode"] in {"percent", "compound_percent"}
+        else 1_000_000
+    )
+    for name in ("attack_penalty_value", "defense_penalty_value"):
+        raw_value = str(form.get(name, "")).strip()
+        values[name] = raw_value
+        try:
+            parsed = float(raw_value)
+            if not 0 <= parsed <= penalty_maximum:
+                raise ValueError
+        except ValueError:
+            errors[name] = f"Use a number from 0 to {penalty_maximum}."
+        else:
+            values[name] = parsed
+    requirements = str(values["attack_requirements"])
+    if "\x00" in requirements:
+        errors["attack_requirements"] = "Requirements must not contain null bytes."
+    elif len(requirements.encode("utf-8")) > MAX_ATTACK_REQUIREMENTS_BYTES:
+        errors["attack_requirements"] = "Use no more than 64 KB of requirements."
+    return values, errors
+
 
 def _requested_users_page(request: Request) -> int:
     try:
         return max(1, int(request.query_params.get("users_page", "1")))
     except (TypeError, ValueError):
         return 1
+
+
+def _requested_users_search(request: Request) -> str:
+    raw_search = str(request.query_params.get("users_search", "")).strip()
+    return re.sub(r"[^A-Za-z0-9_.-]", "", raw_search)[:32]
 
 
 def _pagination_items(current_page: int, total_pages: int) -> list[int | None]:
@@ -108,7 +190,10 @@ def _pagination_items(current_page: int, total_pages: int) -> list[int | None]:
 
 
 def _users_admin_url(request: Request) -> str:
-    return f"/admin?users_page={_requested_users_page(request)}#users"
+    page = _requested_users_page(request)
+    search = _requested_users_search(request)
+    search_query = f"&users_search={search}" if search else ""
+    return f"/admin?users_page={page}{search_query}#users"
 
 
 def get_admin_access(
@@ -146,10 +231,11 @@ def render_admin(
     appearance_mode: str | None = None,
     status_code: int = 200,
 ):
-    branding = get_branding_context(session)
     config = session.get(InstanceConfig, 1)
     if start_contest_if_due(config):
         session.commit()
+    branding = get_branding_context(session)
+    scoring = get_scoring_settings(session)
     scheduled_start = config.contest_starts_at if config else None
     scheduled_start_utc = (
         as_utc(scheduled_start).isoformat().replace("+00:00", "Z")
@@ -157,11 +243,27 @@ def render_admin(
         else ""
     )
     general_values: dict[str, object] = {
-        "contest_started": bool(config and config.contest_started),
+        "contest_state": contest_state(config),
         "contest_starts_at_local": "",
         "contest_starts_at_utc": scheduled_start_utc,
         "registration_enabled": branding["registration_enabled"],
         "registration_invite_only": branding["registration_invite_only"],
+        "attack_reward_mode": scoring.attack_reward_mode,
+        "attack_max_points": scoring.attack_max_points,
+        "attack_points_per_flag": scoring.attack_points_per_flag,
+        "defense_reward_mode": scoring.defense_reward_mode,
+        "defense_max_points": scoring.defense_max_points,
+        "defense_points_lost_per_flag": scoring.defense_points_lost_per_flag,
+        "penalty_mode": scoring.penalty_mode,
+        "attack_penalty_value": scoring.attack_penalty_value,
+        "defense_penalty_value": scoring.defense_penalty_value,
+        "attack_free_failures": scoring.attack_free_failures,
+        "defense_free_failures": scoring.defense_free_failures,
+        "penalize_check_errors": scoring.penalize_check_errors,
+        "attack_requirements": scoring.attack_requirements,
+        "allow_user_attack_requirements": (
+            scoring.allow_user_attack_requirements
+        ),
     }
     if general_form:
         general_values.update(general_form)
@@ -171,6 +273,7 @@ def render_admin(
         "remove_standard_logo": branding["remove_standard_logo"],
         "not_started_homepage_html": branding["not_started_homepage_html"],
         "started_homepage_html": branding["started_homepage_html"],
+        "ended_homepage_html": branding["ended_homepage_html"],
         **branding["palette_values"],
     }
     if form_values:
@@ -179,11 +282,17 @@ def render_admin(
     services = session.scalars(
         select(Service).order_by(Service.name, Service.id)
     ).all()
-    users_total = session.scalar(select(func.count()).select_from(User)) or 0
+    users_search = _requested_users_search(request)
+    users_query = select(User)
+    if users_search:
+        users_query = users_query.where(User.username.ilike(f"%{users_search}%"))
+    users_total = session.scalar(
+        select(func.count()).select_from(users_query.subquery())
+    ) or 0
     users_pages = max(1, (users_total + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE)
     users_page = min(_requested_users_page(request), users_pages)
     users = session.scalars(
-        select(User)
+        users_query
         .order_by(User.username, User.id)
         .offset((users_page - 1) * USERS_PAGE_SIZE)
         .limit(USERS_PAGE_SIZE)
@@ -250,6 +359,7 @@ def render_admin(
             "service_edit_id": service_edit_id,
             "users": users,
             "users_total": users_total,
+            "users_search": users_search,
             "users_page": users_page,
             "users_pages": users_pages,
             "users_page_items": _pagination_items(users_page, users_pages),
@@ -453,7 +563,10 @@ def admin_page(
         appearance_mode=request.query_params.get("appearance_mode"),
         active_section=(
             "users"
-            if "users_page" in request.query_params
+            if (
+                "users_page" in request.query_params
+                or "users_search" in request.query_params
+            )
             else ("appearance" if saved else "general")
         ),
     )
@@ -1057,6 +1170,12 @@ async def update_appearance(
             current_appearance["started_homepage_html"],
         )
     ).strip()
+    ended_homepage_html = str(
+        form.get(
+            "ended_homepage_html",
+            current_appearance["ended_homepage_html"],
+        )
+    ).strip()
     palette_values = {
         name: str(
             form.get(name, current_appearance["palette_values"][name])
@@ -1070,6 +1189,7 @@ async def update_appearance(
         for field_name, value in (
             ("not_started_homepage_html", not_started_homepage_html),
             ("started_homepage_html", started_homepage_html),
+            ("ended_homepage_html", ended_homepage_html),
         ):
             if not value:
                 errors[field_name] = "Template HTML cannot be empty."
@@ -1086,6 +1206,7 @@ async def update_appearance(
         "remove_standard_logo": form.get("remove_standard_logo") == "on",
         "not_started_homepage_html": not_started_homepage_html,
         "started_homepage_html": started_homepage_html,
+        "ended_homepage_html": ended_homepage_html,
         **palette_values,
     }
     if errors:
@@ -1116,6 +1237,7 @@ async def update_appearance(
     if appearance_mode == "templates":
         branding.homepage_html = not_started_homepage_html
         branding.started_homepage_html = started_homepage_html
+        branding.ended_homepage_html = ended_homepage_html
     elif appearance_mode == "palette":
         for name, value in palette_values.items():
             setattr(palette, name, value)
@@ -1145,13 +1267,19 @@ async def update_registration(
     registration_enabled = form.get("registration_enabled") == "on"
     invite_only = form.get("registration_invite_only") == "on"
     invite_code = str(form.get("registration_invite_code", "")).strip()
-    contest_started = form.get("contest_started") == "on"
+    requested_contest_state = str(
+        form.get("contest_state", "not_started")
+    ).strip()
     contest_starts_at_local = str(
         form.get("contest_starts_at_local", "")
     ).strip()
     browser_timezone = str(form.get("browser_timezone", "UTC")).strip()
+    scoring_values, scoring_errors = parse_scoring_form(form)
     contest_starts_at: datetime | None = None
     errors: dict[str, str] = {}
+    errors.update(scoring_errors)
+    if requested_contest_state not in CONTEST_STATES:
+        errors["contest_state"] = "Choose a valid contest state."
     if contest_starts_at_local:
         try:
             local_start = datetime.fromisoformat(contest_starts_at_local)
@@ -1177,20 +1305,53 @@ async def update_registration(
             user,
             general_errors=errors,
             general_form={
-                "contest_started": contest_started,
+                "contest_state": requested_contest_state,
                 "contest_starts_at_local": contest_starts_at_local,
                 "contest_starts_at_utc": "",
                 "registration_enabled": registration_enabled,
                 "registration_invite_only": invite_only,
+                **scoring_values,
             },
             active_section="general",
             status_code=422,
         )
 
-    config.contest_started = contest_started
+    config.contest_started = requested_contest_state in {STARTED, ENDED}
+    config.contest_ended = requested_contest_state == ENDED
     config.contest_starts_at = contest_starts_at
     config.registration_enabled = registration_enabled
     config.registration_invite_only = invite_only
+    scoring = get_scoring_settings(session)
+    scoring.attack_reward_mode = str(scoring_values["attack_reward_mode"])
+    scoring.attack_max_points = int(scoring_values["attack_max_points"])
+    scoring.attack_points_per_flag = int(
+        scoring_values["attack_points_per_flag"]
+    )
+    scoring.defense_reward_mode = str(scoring_values["defense_reward_mode"])
+    scoring.defense_max_points = int(scoring_values["defense_max_points"])
+    scoring.defense_points_lost_per_flag = int(
+        scoring_values["defense_points_lost_per_flag"]
+    )
+    scoring.penalty_mode = str(scoring_values["penalty_mode"])
+    scoring.attack_penalty_value = float(
+        scoring_values["attack_penalty_value"]
+    )
+    scoring.defense_penalty_value = float(
+        scoring_values["defense_penalty_value"]
+    )
+    scoring.attack_free_failures = int(
+        scoring_values["attack_free_failures"]
+    )
+    scoring.defense_free_failures = int(
+        scoring_values["defense_free_failures"]
+    )
+    scoring.penalize_check_errors = bool(
+        scoring_values["penalize_check_errors"]
+    )
+    scoring.attack_requirements = str(scoring_values["attack_requirements"])
+    scoring.allow_user_attack_requirements = bool(
+        scoring_values["allow_user_attack_requirements"]
+    )
     if invite_code:
         config.registration_invite_code_hash = hash_password(invite_code)
     session.commit()

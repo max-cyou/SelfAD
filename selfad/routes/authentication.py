@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 
 from selfad.auth import csrf_token_is_valid, get_session_user, sign_in, sign_out
 from selfad.branding import get_branding_context
+from selfad.contest import STARTED, contest_state
 from selfad.database import get_session
 from selfad.gitea import GiteaUnavailable, authenticate_gitea_user
-from selfad.models import User
+from selfad.models import InstanceConfig, User
 from selfad.settings import get_gitea_settings
 from selfad.web import templates
 
@@ -48,8 +49,13 @@ def login_page(
 
     user = get_session_user(request, session)
     if user:
+        config = session.get(InstanceConfig, 1)
         return RedirectResponse(
-            url="/admin" if user.is_admin else "/services",
+            url=(
+                "/admin"
+                if user.is_admin
+                else ("/services" if contest_state(config) == STARTED else "/")
+            ),
             status_code=303,
         )
 
@@ -118,8 +124,13 @@ def submit_login(
         session.commit()
 
     sign_in(request, user)
+    config = session.get(InstanceConfig, 1)
     return RedirectResponse(
-        url="/admin" if user.is_admin else "/services",
+        url=(
+            "/admin"
+            if user.is_admin
+            else ("/services" if contest_state(config) == STARTED else "/")
+        ),
         status_code=303,
     )
 

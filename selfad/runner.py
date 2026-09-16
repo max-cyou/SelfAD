@@ -25,7 +25,13 @@ JURY_IMAGE = "python:3.13-alpine"
 MAX_ARCHIVE_FILES = 2_000
 MAX_EXTRACTED_BYTES = 64 * 1024 * 1024
 MAX_COMMAND_OUTPUT = 128 * 1024
+MAX_REQUIREMENTS_BYTES = 64 * 1024
 DEFAULT_FLAG_PATTERN = re.compile(r"^[A-Z0-9]{32}$")
+PARTICIPANT_REQUIREMENT_PATTERN = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9_.-]*"
+    r"(?:\[[A-Za-z0-9_.-]+(?:,[A-Za-z0-9_.-]+)*\])?"
+    r"==[A-Za-z0-9][A-Za-z0-9_.+!~-]*$"
+)
 
 
 class RunnerError(Exception):
@@ -45,6 +51,8 @@ class RuntimeCheckResult:
     message: str
     matched_flags: int
     log: str
+    injected_flags: int = 0
+    completed: bool = False
 
 
 def runner_is_available() -> bool:
@@ -63,6 +71,7 @@ def run_service_runtime_check(
     contract: ServiceContractResult,
     exploit_repository_path: str | None = None,
     exploit_commit: str | None = None,
+    exploit_runtime_requirements: bytes | None = None,
 ) -> RuntimeCheckResult:
     if (
         not contract.valid
@@ -99,11 +108,14 @@ def run_service_runtime_check(
     WORK_DIR.mkdir(parents=True, exist_ok=True)
     job_id = uuid.uuid4().hex[:12]
     image_name = f"selfad-check-{job_id}:latest"
+    jury_image_name = f"selfad-jury-{job_id}:latest"
+    exploit_image_name = f"selfad-attack-{job_id}:latest"
     network_name = f"selfad-check-{job_id}"
     service_name = f"selfad-service-{job_id}"
     injector_name = f"selfad-inject-{job_id}"
     exploit_name = f"selfad-exploit-{job_id}"
     build_log = ""
+    checker_output = ""
 
     with tempfile.TemporaryDirectory(prefix=f"check-{job_id}-", dir=WORK_DIR) as job:
         job_path = Path(job)
@@ -135,6 +147,40 @@ def run_service_runtime_check(
                     0,
                     _format_log("build", build.output),
                 )
+
+            jury_requirements = _read_requirements_file(
+                jury_path / "requirements.txt",
+                label="Jury requirements.txt",
+            )
+            jury_image, jury_build = _prepare_runtime_image(
+                jury_requirements,
+                jury_image_name,
+                job_path / "jury-runtime",
+            )
+            if jury_build is not None and jury_build.returncode != 0:
+                return RuntimeCheckResult(
+                    False,
+                    False,
+                    "Jury dependency installation failed.",
+                    0,
+                    _format_log("jury dependencies", jury_build.output),
+                )
+
+            exploit_image = jury_image
+            if exploit_repository_path:
+                exploit_image, exploit_build = _prepare_runtime_image(
+                    exploit_runtime_requirements,
+                    exploit_image_name,
+                    job_path / "attack-runtime",
+                )
+                if exploit_build is not None and exploit_build.returncode != 0:
+                    return RuntimeCheckResult(
+                        False,
+                        False,
+                        "Attack dependency installation failed.",
+                        0,
+                        _format_log("attack dependencies", exploit_build.output),
+                    )
 
             network = _docker(
                 ["network", "create", "--internal", network_name],
@@ -191,12 +237,35 @@ def run_service_runtime_check(
             )
 
             target = f"http://target:{contract.container_port}"
+            if (jury_path / "checker.py").is_file():
+                checker = _run_jury_script(
+                    container_name=f"selfad-checker-{job_id}",
+                    network_name=network_name,
+                    jury_path=jury_path,
+                    script_name="checker.py",
+                    target=target,
+                    image=jury_image,
+                )
+                checker_output = checker.output
+                if checker.returncode != 0:
+                    return RuntimeCheckResult(
+                        False,
+                        False,
+                        _script_failure_message(
+                            "Functionality checker",
+                            checker.output,
+                        ),
+                        0,
+                        _join_logs(("checker.py", checker.output)),
+                    )
+
             injector = _run_jury_script(
                 container_name=injector_name,
                 network_name=network_name,
                 jury_path=jury_path,
                 script_name="inject.py",
                 target=target,
+                image=jury_image,
             )
             if injector.returncode != 0:
                 return RuntimeCheckResult(
@@ -204,7 +273,10 @@ def run_service_runtime_check(
                     False,
                     "Jury injector failed.",
                     0,
-                    _format_log("inject.py", injector.output),
+                    _join_logs(
+                        ("checker.py", checker_output),
+                        ("inject.py", injector.output),
+                    ),
                 )
 
             expected_flags = _output_tokens(injector.output)
@@ -214,7 +286,10 @@ def run_service_runtime_check(
                     False,
                     "Jury injector produced no flags on stdout.",
                     0,
-                    _format_log("inject.py", injector.output),
+                    _join_logs(
+                        ("checker.py", checker_output),
+                        ("inject.py", injector.output),
+                    ),
                 )
 
             functionality_passed = True
@@ -224,6 +299,7 @@ def run_service_runtime_check(
                 jury_path=exploit_path,
                 script_name="exploit.py",
                 target=target,
+                image=exploit_image,
             )
             if exploit.returncode != 0:
                 return RuntimeCheckResult(
@@ -231,7 +307,11 @@ def run_service_runtime_check(
                     True,
                     "Jury exploit failed.",
                     0,
-                    _join_logs(injector.output, exploit.output),
+                    _join_logs(
+                        ("checker.py", checker_output),
+                        ("inject.py", injector.output),
+                        ("exploit.py", exploit.output),
+                    ),
                 )
 
             recovered_flags = _output_tokens(exploit.output)
@@ -248,7 +328,13 @@ def run_service_runtime_check(
                 True,
                 message,
                 matched_flags,
-                _join_logs(injector.output, exploit.output),
+                _join_logs(
+                    ("checker.py", checker_output),
+                    ("inject.py", injector.output),
+                    ("exploit.py", exploit.output),
+                ),
+                len(expected_flags),
+                True,
             )
         except RunnerError as error:
             return RuntimeCheckResult(
@@ -259,10 +345,17 @@ def run_service_runtime_check(
                 _format_log("build", build_log),
             )
         finally:
-            for container_name in (exploit_name, injector_name, service_name):
+            for container_name in (
+                exploit_name,
+                injector_name,
+                f"selfad-checker-{job_id}",
+                service_name,
+            ):
                 _docker_quiet(["rm", "--force", container_name])
             _docker_quiet(["network", "rm", network_name])
             _docker_quiet(["image", "rm", "--force", image_name])
+            _docker_quiet(["image", "rm", "--force", jury_image_name])
+            _docker_quiet(["image", "rm", "--force", exploit_image_name])
 
 
 def _extract_repository_archive(archive_bytes: bytes, destination: Path) -> None:
@@ -311,13 +404,8 @@ def _run_jury_script(
     jury_path: Path,
     script_name: str,
     target: str,
+    image: str,
 ) -> CommandResult:
-    image = _docker(["image", "inspect", JURY_IMAGE], timeout=15)
-    if image.returncode != 0:
-        pull = _docker(["pull", JURY_IMAGE], timeout=300, max_output=2 * 1024 * 1024)
-        if pull.returncode != 0:
-            raise RunnerError("Could not prepare the fixed jury runtime image.")
-
     return _docker(
         [
             "run",
@@ -347,7 +435,7 @@ def _run_jury_script(
             "/workspace",
             "--env",
             f"SELFAD_TARGET={target}",
-            JURY_IMAGE,
+            image,
             "python",
             script_name,
             target,
@@ -355,6 +443,92 @@ def _run_jury_script(
         timeout=45,
         max_output=MAX_COMMAND_OUTPUT,
     )
+
+
+def _read_requirements_file(path: Path, *, label: str) -> bytes | None:
+    if not path.is_file():
+        return None
+    content = path.read_bytes()
+    _validate_requirements(content, label=label)
+    return content
+
+
+def _validate_requirements(content: bytes, *, label: str) -> None:
+    if len(content) > MAX_REQUIREMENTS_BYTES:
+        raise RunnerError(f"{label} exceeds the 64 KB limit.")
+    try:
+        decoded = content.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise RunnerError(f"{label} must be UTF-8 text.") from error
+    if "\x00" in decoded:
+        raise RunnerError(f"{label} must not contain null bytes.")
+
+
+def build_attack_runtime_requirements(
+    fixed_requirements: str,
+    participant_requirements: bytes | None,
+) -> bytes | None:
+    fixed = fixed_requirements.encode("utf-8")
+    _validate_requirements(fixed, label="Fixed attack requirements")
+    if participant_requirements is not None:
+        _validate_participant_requirements(participant_requirements)
+
+    parts = [content for content in (fixed, participant_requirements) if content]
+    if not parts:
+        return None
+    combined = b"\n".join(parts)
+    _validate_requirements(combined, label="Combined attack requirements")
+    return combined
+
+
+def _validate_participant_requirements(content: bytes) -> None:
+    _validate_requirements(content, label="Participant requirements.txt")
+    for line in content.decode("utf-8").splitlines():
+        requirement = line.split("#", 1)[0].strip()
+        if requirement and not PARTICIPANT_REQUIREMENT_PATTERN.fullmatch(
+            requirement
+        ):
+            raise RunnerError(
+                "Participant requirements.txt only accepts pinned "
+                "package==version lines."
+            )
+
+
+def _prepare_runtime_image(
+    requirements: bytes | None,
+    image_name: str,
+    context: Path,
+) -> tuple[str, CommandResult | None]:
+    base_image = _docker(["image", "inspect", JURY_IMAGE], timeout=15)
+    if base_image.returncode != 0:
+        pull = _docker(
+            ["pull", JURY_IMAGE],
+            timeout=300,
+            max_output=2 * 1024 * 1024,
+        )
+        if pull.returncode != 0:
+            raise RunnerError("Could not prepare the fixed jury runtime image.")
+
+    if not requirements or not requirements.strip():
+        return JURY_IMAGE, None
+
+    _validate_requirements(requirements, label="Requirements")
+    context.mkdir()
+    (context / "requirements.txt").write_bytes(requirements)
+    (context / "Dockerfile").write_text(
+        "FROM python:3.13-alpine\n"
+        "COPY requirements.txt /tmp/selfad-requirements.txt\n"
+        "RUN python -m pip install --no-cache-dir --disable-pip-version-check "
+        "-r /tmp/selfad-requirements.txt "
+        "&& rm /tmp/selfad-requirements.txt\n",
+        encoding="utf-8",
+    )
+    build = _docker(
+        ["build", "--tag", image_name, str(context)],
+        timeout=300,
+        max_output=2 * 1024 * 1024,
+    )
+    return image_name, build
 
 
 def _container_ip(container_name: str, network_name: str) -> str:
@@ -397,12 +571,18 @@ def _output_tokens(output: str) -> set[str]:
     }
 
 
-def _join_logs(injector_output: str, exploit_output: str) -> str:
-    return (
-        _format_log("inject.py", injector_output)
-        + "\n"
-        + _format_log("exploit.py", exploit_output)
+def _join_logs(*logs: tuple[str, str]) -> str:
+    return "\n".join(
+        _format_log(label, output)
+        for label, output in logs
+        if output.strip()
     )[:MAX_COMMAND_OUTPUT]
+
+
+def _script_failure_message(label: str, output: str) -> str:
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    detail = lines[-1][:500] if lines else "exited with a non-zero status"
+    return f"{label} failed: {detail}"
 
 
 def _format_log(label: str, output: str) -> str:

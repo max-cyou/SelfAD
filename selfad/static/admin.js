@@ -35,6 +35,71 @@
     }
   }
 
+  const scoringSettings = document.querySelector("[data-scoring-settings]");
+  if (scoringSettings) {
+    const attackMode = scoringSettings.querySelector("[data-attack-reward-mode]");
+    const defenseMode = scoringSettings.querySelector("[data-defense-reward-mode]");
+    const penaltyMode = scoringSettings.querySelector("[data-penalty-mode]");
+    const attackPerFlag = scoringSettings.querySelector("[data-attack-per-flag-field]");
+    const defensePerFlag = scoringSettings.querySelector("[data-defense-per-flag-field]");
+    const attackMaximum = scoringSettings.querySelector("[data-attack-maximum]");
+    const defenseMaximum = scoringSettings.querySelector("[data-defense-maximum]");
+    const attackPenalty = scoringSettings.querySelector("[data-attack-penalty]");
+    const defensePenalty = scoringSettings.querySelector("[data-defense-penalty]");
+    const attackFree = scoringSettings.querySelector("[data-attack-free]");
+    const defenseFree = scoringSettings.querySelector("[data-defense-free]");
+    const preview = scoringSettings.querySelector("[data-scoring-preview]");
+
+    const numericValue = (control) => {
+      const value = Number(control?.value);
+      return Number.isFinite(value) ? Math.max(0, value) : 0;
+    };
+    const exampleScore = (raw, value, freeFailures) => {
+      const chargedFailures = Math.max(0, 2 - freeFailures);
+      if (penaltyMode.value === "points") {
+        return Math.max(0, Math.round(raw - value * chargedFailures));
+      }
+      if (penaltyMode.value === "percent") {
+        const percentage = Math.min(100, value * chargedFailures);
+        return Math.max(0, Math.round(raw * (1 - percentage / 100)));
+      }
+      if (penaltyMode.value === "compound_percent") {
+        const rate = Math.min(100, value) / 100;
+        return Math.max(0, Math.round(raw * ((1 - rate) ** chargedFailures)));
+      }
+      return Math.round(raw);
+    };
+    const updateScoringPreview = () => {
+      attackPerFlag.hidden = attackMode.value !== "per_flag";
+      defensePerFlag.hidden = defenseMode.value !== "per_flag";
+      const percentageMode = ["percent", "compound_percent"].includes(penaltyMode.value);
+      attackPenalty.max = percentageMode ? "100" : "1000000";
+      defensePenalty.max = percentageMode ? "100" : "1000000";
+
+      const attackRaw = numericValue(attackMaximum);
+      const defenseRaw = numericValue(defenseMaximum);
+      const attackResult = exampleScore(
+        attackRaw,
+        numericValue(attackPenalty),
+        numericValue(attackFree),
+      );
+      const defenseResult = exampleScore(
+        defenseRaw,
+        numericValue(defensePenalty),
+        numericValue(defenseFree),
+      );
+      preview.textContent = penaltyMode.value === "none"
+        ? "Penalty is disabled. Only an improved raw result changes the retained score."
+        : `Example after 2 unsuccessful submissions: attack ${attackResult}/${Math.round(attackRaw)} pts, defense ${defenseResult}/${Math.round(defenseRaw)} pts. Already awarded points never decrease.`;
+    };
+
+    scoringSettings.querySelectorAll("input, select").forEach((control) => {
+      control.addEventListener("input", updateScoringPreview);
+      control.addEventListener("change", updateScoringPreview);
+    });
+    updateScoringPreview();
+  }
+
   const tabs = Array.from(document.querySelectorAll("[data-admin-tab]"));
   const panels = Array.from(document.querySelectorAll("[data-admin-panel]"));
   const sections = new Set(tabs.map((tab) => tab.dataset.adminTab));

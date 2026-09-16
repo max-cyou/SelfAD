@@ -112,13 +112,17 @@
                   {% if general_errors.get('contest_starts_at_local') %}
                     <p class="general-settings-error" role="alert">{{ general_errors.contest_starts_at_local }}</p>
                   {% endif %}
+                  {% if general_errors.get('contest_state') %}
+                    <p class="general-settings-error" role="alert">{{ general_errors.contest_state }}</p>
+                  {% endif %}
                   <div class="contest-settings">
                     <div class="contest-setting">
-                      <label class="general-checkbox">
-                        <input name="contest_started" type="checkbox"{% if general_form.contest_started %} checked{% endif %}>
-                        <span>Contest started</span>
-                      </label>
-                      <p>Start the contest immediately.</p>
+                      <label for="contest-state">Contest state</label>
+                      <select id="contest-state" name="contest_state">
+                        <option value="not_started"{% if general_form.contest_state == 'not_started' %} selected{% endif %}>Not started</option>
+                        <option value="started"{% if general_form.contest_state == 'started' %} selected{% endif %}>Started</option>
+                        <option value="ended"{% if general_form.contest_state == 'ended' %} selected{% endif %}>Ended</option>
+                      </select>
                     </div>
                     <div class="contest-setting contest-setting--scheduled">
                       <label for="contest-starts-at">Automatic start</label>
@@ -136,6 +140,124 @@
                       </small>
                       </div>
                     </div>
+                  </div>
+                  <div class="settings-subsection-title"><span>Scoring</span></div>
+                  <div class="scoring-settings" data-scoring-settings>
+                    <div class="scoring-intro">
+                      <p>A submission adds penalty debt only when it does not improve the participant's raw score. That debt reduces later improved results; the best awarded result is retained. Changes apply to future checks.</p>
+                    </div>
+                    <section class="scoring-group" aria-labelledby="attack-scoring-title">
+                      <div class="scoring-group-heading">
+                        <h3 id="attack-scoring-title">Attack rewards</h3>
+                        <p>Points for flags recovered by the participant exploit.</p>
+                      </div>
+                      <div class="scoring-fields">
+                        <label class="scoring-field{% if general_errors.get('attack_reward_mode') %} scoring-field--error{% endif %}">
+                          <span>Calculation</span>
+                          <select name="attack_reward_mode" data-attack-reward-mode>
+                            <option value="coverage"{% if general_form.attack_reward_mode == 'coverage' %} selected{% endif %}>Percentage recovered</option>
+                            <option value="per_flag"{% if general_form.attack_reward_mode == 'per_flag' %} selected{% endif %}>Points per flag</option>
+                          </select>
+                          <small>{{ general_errors.get('attack_reward_mode') or 'Percentage scales the result against the maximum.' }}</small>
+                        </label>
+                        <label class="scoring-field{% if general_errors.get('attack_max_points') %} scoring-field--error{% endif %}">
+                          <span>Maximum points</span>
+                          <input name="attack_max_points" type="number" min="1" max="1000000" step="1" value="{{ general_form.attack_max_points }}" required data-attack-maximum>
+                          <small>{{ general_errors.get('attack_max_points') or 'Hard cap for one service.' }}</small>
+                        </label>
+                        <label class="scoring-field{% if general_errors.get('attack_points_per_flag') %} scoring-field--error{% endif %}" data-attack-per-flag-field>
+                          <span>Points per recovered flag</span>
+                          <input name="attack_points_per_flag" type="number" min="0" max="1000000" step="1" value="{{ general_form.attack_points_per_flag }}" required>
+                          <small>{{ general_errors.get('attack_points_per_flag') or 'Used only in points-per-flag mode.' }}</small>
+                        </label>
+                      </div>
+                    </section>
+                    <section class="scoring-group" aria-labelledby="defense-scoring-title">
+                      <div class="scoring-group-heading">
+                        <h3 id="defense-scoring-title">Defense rewards</h3>
+                        <p>Starts from the maximum and loses points for leaked flags.</p>
+                      </div>
+                      <div class="scoring-fields">
+                        <label class="scoring-field{% if general_errors.get('defense_reward_mode') %} scoring-field--error{% endif %}">
+                          <span>Calculation</span>
+                          <select name="defense_reward_mode" data-defense-reward-mode>
+                            <option value="per_flag"{% if general_form.defense_reward_mode == 'per_flag' %} selected{% endif %}>Lost points per flag</option>
+                            <option value="coverage"{% if general_form.defense_reward_mode == 'coverage' %} selected{% endif %}>Percentage protected</option>
+                          </select>
+                          <small>{{ general_errors.get('defense_reward_mode') or 'Percentage uses the share of flags not recovered.' }}</small>
+                        </label>
+                        <label class="scoring-field{% if general_errors.get('defense_max_points') %} scoring-field--error{% endif %}">
+                          <span>Maximum points</span>
+                          <input name="defense_max_points" type="number" min="1" max="1000000" step="1" value="{{ general_form.defense_max_points }}" required data-defense-maximum>
+                          <small>{{ general_errors.get('defense_max_points') or 'Awarded when the jury exploit recovers nothing.' }}</small>
+                        </label>
+                        <label class="scoring-field{% if general_errors.get('defense_points_lost_per_flag') %} scoring-field--error{% endif %}" data-defense-per-flag-field>
+                          <span>Lost points per leaked flag</span>
+                          <input name="defense_points_lost_per_flag" type="number" min="0" max="1000000" step="1" value="{{ general_form.defense_points_lost_per_flag }}" required>
+                          <small>{{ general_errors.get('defense_points_lost_per_flag') or 'Used only in lost-points-per-flag mode.' }}</small>
+                        </label>
+                      </div>
+                    </section>
+                    <section class="scoring-group" aria-labelledby="penalty-scoring-title">
+                      <div class="scoring-group-heading">
+                        <h3 id="penalty-scoring-title">Unsuccessful submission penalty</h3>
+                        <p>Applied to later improved results. Build, contract and runtime errors can also add debt.</p>
+                      </div>
+                      <div class="scoring-fields scoring-fields--penalty">
+                        <label class="scoring-field{% if general_errors.get('penalty_mode') %} scoring-field--error{% endif %}">
+                          <span>Penalty unit</span>
+                          <select name="penalty_mode" data-penalty-mode>
+                            <option value="compound_percent"{% if general_form.penalty_mode == 'compound_percent' %} selected{% endif %}>Compounding percent of potential score</option>
+                            <option value="percent"{% if general_form.penalty_mode == 'percent' %} selected{% endif %}>Linear percent of raw result</option>
+                            <option value="points"{% if general_form.penalty_mode == 'points' %} selected{% endif %}>Fixed points</option>
+                            <option value="none"{% if general_form.penalty_mode == 'none' %} selected{% endif %}>Disabled</option>
+                          </select>
+                          <small>{{ general_errors.get('penalty_mode') or 'Compounding 50% becomes 50%, 75%, 87.5%… after successive failures.' }}</small>
+                        </label>
+                        <label class="scoring-field{% if general_errors.get('attack_penalty_value') %} scoring-field--error{% endif %}">
+                          <span>Attack penalty per failure</span>
+                          <input name="attack_penalty_value" type="number" min="0" step="0.1" value="{{ general_form.attack_penalty_value }}" required data-attack-penalty>
+                          <small>{{ general_errors.get('attack_penalty_value') or 'Percent or points, according to the selected unit.' }}</small>
+                        </label>
+                        <label class="scoring-field{% if general_errors.get('defense_penalty_value') %} scoring-field--error{% endif %}">
+                          <span>Defense penalty per failure</span>
+                          <input name="defense_penalty_value" type="number" min="0" step="0.1" value="{{ general_form.defense_penalty_value }}" required data-defense-penalty>
+                          <small>{{ general_errors.get('defense_penalty_value') or 'Percent or points, according to the selected unit.' }}</small>
+                        </label>
+                        <label class="scoring-field{% if general_errors.get('attack_free_failures') %} scoring-field--error{% endif %}">
+                          <span>Free attack failures</span>
+                          <input name="attack_free_failures" type="number" min="0" max="10000" step="1" value="{{ general_form.attack_free_failures }}" required data-attack-free>
+                          <small>{{ general_errors.get('attack_free_failures') or 'Ignored before attack penalty starts.' }}</small>
+                        </label>
+                        <label class="scoring-field{% if general_errors.get('defense_free_failures') %} scoring-field--error{% endif %}">
+                          <span>Free defense failures</span>
+                          <input name="defense_free_failures" type="number" min="0" max="10000" step="1" value="{{ general_form.defense_free_failures }}" required data-defense-free>
+                          <small>{{ general_errors.get('defense_free_failures') or 'Ignored before defense penalty starts.' }}</small>
+                        </label>
+                        <label class="scoring-check">
+                          <input name="penalize_check_errors" type="checkbox"{% if general_form.penalize_check_errors %} checked{% endif %}>
+                          <span>Count contract, build, healthcheck and runtime errors as unsuccessful submissions</span>
+                        </label>
+                      </div>
+                      <div class="scoring-preview" data-scoring-preview aria-live="polite"></div>
+                    </section>
+                    <section class="scoring-group" aria-labelledby="attack-runtime-title">
+                      <div class="scoring-group-heading">
+                        <h3 id="attack-runtime-title">Attack runtime</h3>
+                        <p>Dependencies for participant exploit scripts. Participant Dockerfiles remain locked.</p>
+                      </div>
+                      <div class="scoring-fields">
+                        <label class="scoring-field scoring-field--wide{% if general_errors.get('attack_requirements') %} scoring-field--error{% endif %}">
+                          <span>Fixed requirements</span>
+                          <textarea name="attack_requirements" rows="4" maxlength="65536" placeholder="requests==2.32.5">{{ general_form.attack_requirements }}</textarea>
+                          <small>{{ general_errors.get('attack_requirements') or 'Installed for every attack script. Leave empty for the Python standard library only.' }}</small>
+                        </label>
+                        <label class="scoring-check">
+                          <input name="allow_user_attack_requirements" type="checkbox"{% if general_form.allow_user_attack_requirements %} checked{% endif %}>
+                          <span>Allow a participant <code>requirements.txt</code> in addition to the fixed list (pinned <code>package==version</code> lines only)</span>
+                        </label>
+                      </div>
+                    </section>
                   </div>
                   <div class="general-settings-actions">
                     <button type="submit">Save settings</button>
@@ -318,7 +440,9 @@
                       <strong>Repository contract</strong>
                       <span>Service: <code>Dockerfile</code>, <code>selfad.yml</code></span>
                       <span>Jury: <code>inject.py</code>, <code>exploit.py</code></span>
+                      <span>Optional: <code>checker.py</code>, <code>requirements.txt</code></span>
                       <span>Target: <code>SELFAD_TARGET</code> and argv[1]</span>
+                      <span>Full author and jury instructions are added as <code>README.md</code>.</span>
                     </div>
 
                     <div class="service-form-actions">
@@ -339,8 +463,12 @@
                 <div class="panel-heading">
                   <div>
                     <h2 id="users-title">Users</h2>
-                    <p>{{ users_total }} account{% if users_total != 1 %}s{% endif %} with access to this instance.</p>
+                    <p>{% if users_search %}{{ users_total }} match{% if users_total != 1 %}es{% endif %} for “{{ users_search }}”.{% else %}{{ users_total }} account{% if users_total != 1 %}s{% endif %} with access to this instance.{% endif %}</p>
                   </div>
+                  <form class="users-search" action="/admin#users" method="get" role="search">
+                    <label class="visually-hidden" for="users-search">Search users by username</label>
+                    <input id="users-search" name="users_search" type="search" value="{{ users_search }}" maxlength="32" placeholder="Search username" autocomplete="off">
+                  </form>
                 </div>
 
                 <div class="admin-table-wrap" tabindex="0" role="region" aria-label="Scrollable administration table">
@@ -375,14 +503,14 @@
                               <button
                                 type="button"
                                 data-user-edit
-                                data-update-action="{{ url_for('update_user', user_id=listed_user.id) }}?users_page={{ users_page }}"
+                                data-update-action="{{ url_for('update_user', user_id=listed_user.id) }}?users_page={{ users_page }}{% if users_search %}&users_search={{ users_search }}{% endif %}"
                                 data-username="{{ listed_user.username }}"
                                 data-email="{{ listed_user.email }}"
                                 data-role="{{ 'admin' if listed_user.is_admin else 'user' }}"
                                 data-has-ssh-key="{{ 'true' if listed_user.ssh_public_key else 'false' }}"
                               >Edit</button>
                               {% if listed_user.id != current_user.id %}
-                                <form method="post" action="{{ url_for('delete_user', user_id=listed_user.id) }}?users_page={{ users_page }}" data-delete-user="{{ listed_user.username }}">
+                                <form method="post" action="{{ url_for('delete_user', user_id=listed_user.id) }}?users_page={{ users_page }}{% if users_search %}&users_search={{ users_search }}{% endif %}" data-delete-user="{{ listed_user.username }}">
                                   <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
                                   <button class="table-button--danger" type="submit">Delete</button>
                                 </form>
@@ -390,6 +518,8 @@
                             </div>
                           </td>
                         </tr>
+                      {% else %}
+                        <tr><td class="table-empty" colspan="6">No users match this username.</td></tr>
                       {% endfor %}
                     </tbody>
                   </table>
@@ -398,7 +528,7 @@
                 {% if users_pages > 1 %}
                   <nav class="admin-pagination" aria-label="Users pagination">
                     {% if users_page > 1 %}
-                      <a href="?users_page={{ users_page - 1 }}#users" rel="prev">← Previous</a>
+                      <a href="?users_page={{ users_page - 1 }}{% if users_search %}&users_search={{ users_search }}{% endif %}#users" rel="prev">← Previous</a>
                     {% else %}
                       <span class="admin-pagination__disabled">← Previous</span>
                     {% endif %}
@@ -409,12 +539,12 @@
                         {% elif page == users_page %}
                           <span class="admin-pagination__current" aria-current="page">{{ page }}</span>
                         {% else %}
-                          <a href="?users_page={{ page }}#users">{{ page }}</a>
+                          <a href="?users_page={{ page }}{% if users_search %}&users_search={{ users_search }}{% endif %}#users">{{ page }}</a>
                         {% endif %}
                       {% endfor %}
                     </div>
                     {% if users_page < users_pages %}
-                      <a href="?users_page={{ users_page + 1 }}#users" rel="next">Next →</a>
+                      <a href="?users_page={{ users_page + 1 }}{% if users_search %}&users_search={{ users_search }}{% endif %}#users" rel="next">Next →</a>
                     {% else %}
                       <span class="admin-pagination__disabled">Next →</span>
                     {% endif %}
@@ -432,9 +562,9 @@
                   <form
                     class="service-form"
                     method="post"
-                    action="{% if user_edit_id %}{{ url_for('update_user', user_id=user_edit_id) }}{% else %}{{ url_for('create_participant') }}{% endif %}?users_page={{ users_page }}"
+                    action="{% if user_edit_id %}{{ url_for('update_user', user_id=user_edit_id) }}{% else %}{{ url_for('create_participant') }}{% endif %}?users_page={{ users_page }}{% if users_search %}&users_search={{ users_search }}{% endif %}"
                     data-user-form
-                    data-create-action="{{ url_for('create_participant') }}?users_page={{ users_page }}"
+                    data-create-action="{{ url_for('create_participant') }}?users_page={{ users_page }}{% if users_search %}&users_search={{ users_search }}{% endif %}"
                   >
                     <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
                     {% if participant_errors.get('_form') %}<p class="inline-error">{{ participant_errors['_form'] }}</p>{% endif %}
@@ -625,6 +755,18 @@
                       <label for="started-homepage-html">HTML</label>
                       <textarea id="started-homepage-html" name="started_homepage_html" maxlength="20000" rows="11" spellcheck="false" required>{{ form_values.started_homepage_html }}</textarea>
                       <small>{{ errors.get('started_homepage_html') or 'Rendered inside the centered main block.' }}</small>
+                    </div>
+                  </section>
+
+                  <section class="template-settings-section">
+                    <div class="template-section-heading">
+                      <h3>Ended main page</h3>
+                      <p>Shown after the contest is ended. Only the scoreboard remains public.</p>
+                    </div>
+                    <div class="field homepage-html-field{% if errors.get('ended_homepage_html') %} field--error{% endif %}">
+                      <label for="ended-homepage-html">HTML</label>
+                      <textarea id="ended-homepage-html" name="ended_homepage_html" maxlength="20000" rows="11" spellcheck="false" required>{{ form_values.ended_homepage_html }}</textarea>
+                      <small>{{ errors.get('ended_homepage_html') or 'Rendered inside the centered main block.' }}</small>
                     </div>
                   </section>
                 </div>

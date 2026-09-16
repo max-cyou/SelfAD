@@ -7,9 +7,17 @@
   </a>
 
   <nav aria-label="Main navigation">
-    <a{% if request.url.path == '/admin' %} class="active"{% endif %} href="/admin">Admin panel</a>
-    <a{% if request.url.path == '/services' %} class="active"{% endif %} href="/services">Services</a>
-    <a{% if request.url.path == '/scoreboard' %} class="active"{% endif %} href="/scoreboard">Scoreboard</a>
-    <a href="/admin#general">Settings</a>
+    {% if current_user and current_user.is_admin %}
+      <a{% if request.url.path == '/admin' %} class="active"{% endif %} href="/admin">Admin panel</a>
+    {% endif %}
+    {% if contest_state == 'started' or (current_user and current_user.is_admin) %}
+      <a{% if request.url.path == '/services' %} class="active"{% endif %} href="/services">Services</a>
+    {% endif %}
+    {% if contest_state in ('started', 'ended') or (current_user and current_user.is_admin) %}
+      <a{% if request.url.path == '/scoreboard' %} class="active"{% endif %} href="/scoreboard">Scoreboard</a>
+    {% endif %}
+    {% if current_user and current_user.is_admin %}
+      <a href="/admin#general">Settings</a>
+    {% endif %}
   </nav>
 </header>

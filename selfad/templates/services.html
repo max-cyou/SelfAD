@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% if has_checking %}<meta http-equiv="refresh" content="3">{% endif %}
     <meta name="description" content="Your SelfAD services.">
     <title>{{ title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v={{ static_version('app.css') }}">
@@ -16,6 +17,7 @@
           <h1>Vulnerable services</h1>
           <div class="participant-heading-meta">
             <p>Push an exploit to attack. The defense repository opens after your first successful attack.</p>
+            <p class="participant-credentials">Your SelfAD username and password also work in Gitea.</p>
           </div>
         </div>
 
@@ -50,8 +52,8 @@
                   {% endif %}
                 </div>
                 <div class="submission-grid">
-                  <div><span>Attack</span><strong class="status status--{{ assignment.attack_status.value }}">{{ assignment.attack_status.value }}</strong><p>{{ assignment.attack_message }}</p><b>{{ assignment.attack_score }} pts</b></div>
-                  <div><span>Defense</span><strong class="status status--{{ assignment.defense_status.value }}">{{ assignment.defense_status.value }}</strong><p>{{ assignment.defense_message }}</p><b>{{ assignment.defense_score }} pts</b></div>
+                  <div><span>Attack</span><strong class="status status--{{ assignment.attack_status.value }}">{{ 'checking' if assignment.attack_status.value == 'running' else assignment.attack_status.value }}</strong><p>{{ assignment.attack_message }}</p><b>{{ assignment.attack_score }} pts</b></div>
+                  <div><span>Defense</span><strong class="status status--{{ assignment.defense_status.value }}">{{ 'checking' if assignment.defense_status.value == 'running' else assignment.defense_status.value }}</strong><p>{{ assignment.defense_message }}</p><b>{{ assignment.defense_score }} pts</b></div>
                 </div>
               </article>
             {% endfor %}
