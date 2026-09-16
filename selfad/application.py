@@ -28,10 +28,12 @@ from selfad.settings import (
     get_gitea_settings,
     get_gitea_webhook_secret,
     get_session_secret,
+    get_worker_concurrency,
     use_secure_cookies,
 )
+from selfad.runner import cleanup_managed_runner_resources
 from selfad.web import STATIC_DIR
-from selfad.worker import run_repository_worker
+from selfad.worker import recover_interrupted_repository_events, run_repository_worker
 
 
 logger = logging.getLogger(__name__)
@@ -93,19 +95,26 @@ def reconcile_repository_webhooks() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     initialize_database()
+    recover_interrupted_repository_events()
+    cleanup_managed_runner_resources()
     reconcile_administrator_gitea_identity()
     reconcile_repository_webhooks()
     stop_event = asyncio.Event()
-    worker_task = asyncio.create_task(run_repository_worker(stop_event))
+    worker_tasks = [
+        asyncio.create_task(run_repository_worker(stop_event))
+        for _ in range(get_worker_concurrency())
+    ]
     try:
         yield
     finally:
         stop_event.set()
-        worker_task.cancel()
-        try:
-            await worker_task
-        except asyncio.CancelledError:
-            pass
+        for worker_task in worker_tasks:
+            worker_task.cancel()
+        for worker_task in worker_tasks:
+            try:
+                await worker_task
+            except asyncio.CancelledError:
+                pass
 
 
 def create_app() -> FastAPI:

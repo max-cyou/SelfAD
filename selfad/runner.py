@@ -7,8 +7,6 @@ import subprocess
 import tarfile
 import tempfile
 import time
-import urllib.error
-import urllib.request
 import uuid
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -16,11 +14,10 @@ from pathlib import Path, PurePosixPath
 from selfad.database import DATA_DIR
 from selfad.gitea import download_repository_archive
 from selfad.service_contract import ServiceContractResult
-from selfad.settings import GiteaSettings
+from selfad.settings import GiteaSettings, get_runner_settings
 
 
 WORK_DIR = DATA_DIR / "work"
-DOCKER_HOST = "unix:///run/selfad-docker/docker.sock"
 JURY_IMAGE = "python:3.13-alpine"
 MAX_ARCHIVE_FILES = 2_000
 MAX_EXTRACTED_BYTES = 64 * 1024 * 1024
@@ -32,6 +29,8 @@ PARTICIPANT_REQUIREMENT_PATTERN = re.compile(
     r"(?:\[[A-Za-z0-9_.-]+(?:,[A-Za-z0-9_.-]+)*\])?"
     r"==[A-Za-z0-9][A-Za-z0-9_.+!~-]*$"
 )
+RUNNER_LABEL = "selfad.managed=true"
+RUNNER_USER = "10001:10001"
 
 
 class RunnerError(Exception):
@@ -63,6 +62,46 @@ def runner_is_available() -> bool:
     return result.returncode == 0
 
 
+def runner_mode() -> str:
+    settings = get_runner_settings()
+    if settings.uses_internal_runner:
+        return "internal" if settings.internal_runner_enabled else "unavailable"
+    return "external"
+
+
+def cleanup_managed_runner_resources() -> int:
+    """Remove job resources left behind by a stopped SelfAD process.
+
+    Every job object receives ``selfad.managed=true``. This deliberately never
+    touches runner resources without that label.
+    """
+    if not runner_is_available():
+        return 0
+    removed = 0
+    resource_commands = (
+        ("ps", "-aq", "--filter", f"label={RUNNER_LABEL}"),
+        ("network", "ls", "-q", "--filter", f"label={RUNNER_LABEL}"),
+        ("images", "-q", "--filter", f"label={RUNNER_LABEL}"),
+    )
+    for index, command in enumerate(resource_commands):
+        result = _docker(list(command), timeout=30, max_output=32 * 1024)
+        if result.returncode != 0:
+            continue
+        identifiers = [
+            line.strip() for line in result.output.splitlines() if line.strip()
+        ]
+        if not identifiers:
+            continue
+        if index == 0:
+            _docker_quiet(["rm", "--force", *identifiers])
+        elif index == 1:
+            _docker_quiet(["network", "rm", *identifiers])
+        else:
+            _docker_quiet(["image", "rm", "--force", *identifiers])
+        removed += len(identifiers)
+    return removed
+
+
 def run_service_runtime_check(
     settings: GiteaSettings,
     *,
@@ -83,7 +122,7 @@ def run_service_runtime_check(
         raise RunnerError("A valid repository contract is required.")
     if not runner_is_available():
         raise RunnerError(
-            "The internal Docker runner is unavailable. Start SelfAD with --privileged."
+            "The configured Docker runner is unavailable."
         )
 
     source_archive = download_repository_archive(
@@ -131,6 +170,8 @@ def run_service_runtime_check(
             build = _docker(
                 [
                     "build",
+                    "--label",
+                    RUNNER_LABEL,
                     "--tag",
                     image_name,
                     str(source_path),
@@ -183,7 +224,14 @@ def run_service_runtime_check(
                     )
 
             network = _docker(
-                ["network", "create", "--internal", network_name],
+                [
+                    "network",
+                    "create",
+                    "--internal",
+                    "--label",
+                    RUNNER_LABEL,
+                    network_name,
+                ],
                 timeout=30,
             )
             if network.returncode != 0:
@@ -195,6 +243,8 @@ def run_service_runtime_check(
                     "--detach",
                     "--name",
                     service_name,
+                    "--label",
+                    RUNNER_LABEL,
                     "--network",
                     network_name,
                     "--network-alias",
@@ -207,6 +257,11 @@ def run_service_runtime_check(
                     "1",
                     "--pids-limit",
                     "128",
+                    "--ulimit",
+                    "nofile=256:256",
+                    "--init",
+                    "--ipc",
+                    "none",
                     "--cap-drop",
                     "ALL",
                     "--security-opt",
@@ -229,9 +284,8 @@ def run_service_runtime_check(
                     _format_log("docker run", service.output),
                 )
 
-            container_ip = _container_ip(service_name, network_name)
             _wait_for_healthcheck(
-                container_ip,
+                network_name,
                 contract.container_port,
                 contract.healthcheck_path,
             )
@@ -412,6 +466,8 @@ def _run_jury_script(
             "--rm",
             "--name",
             container_name,
+            "--label",
+            RUNNER_LABEL,
             "--network",
             network_name,
             "--memory",
@@ -422,6 +478,11 @@ def _run_jury_script(
             "0.5",
             "--pids-limit",
             "64",
+            "--ulimit",
+            "nofile=128:128",
+            "--init",
+            "--ipc",
+            "none",
             "--cap-drop",
             "ALL",
             "--security-opt",
@@ -429,12 +490,18 @@ def _run_jury_script(
             "--read-only",
             "--tmpfs",
             "/tmp:rw,noexec,nosuid,size=16m",
+            "--user",
+            RUNNER_USER,
             "--volume",
             f"{jury_path}:/workspace:ro",
             "--workdir",
             "/workspace",
             "--env",
             f"SELFAD_TARGET={target}",
+            "--env",
+            "HOME=/tmp",
+            "--env",
+            "PYTHONDONTWRITEBYTECODE=1",
             image,
             "python",
             script_name,
@@ -524,43 +591,71 @@ def _prepare_runtime_image(
         encoding="utf-8",
     )
     build = _docker(
-        ["build", "--tag", image_name, str(context)],
+        ["build", "--label", RUNNER_LABEL, "--tag", image_name, str(context)],
         timeout=300,
         max_output=2 * 1024 * 1024,
     )
     return image_name, build
 
 
-def _container_ip(container_name: str, network_name: str) -> str:
-    result = _docker(
-        [
-            "inspect",
-            "--format",
-            f"{{{{(index .NetworkSettings.Networks \"{network_name}\").IPAddress}}}}",
-            container_name,
-        ],
-        timeout=15,
+def _wait_for_healthcheck(network_name: str, port: int, path: str) -> None:
+    target = f"http://target:{port}{path}"
+    probe_code = (
+        "import sys,time,urllib.request,urllib.error\n"
+        "url=sys.argv[1]; last='no response'; deadline=time.monotonic()+45\n"
+        "while time.monotonic()<deadline:\n"
+        "  try:\n"
+        "    with urllib.request.urlopen(url,timeout=2) as response:\n"
+        "      if 200<=response.status<400: sys.exit(0)\n"
+        "      last=f'HTTP {response.status}'\n"
+        "  except (urllib.error.URLError,TimeoutError,OSError) as error: last=str(error)\n"
+        "  time.sleep(1)\n"
+        "print(last); sys.exit(1)\n"
     )
-    address = result.output.strip()
-    if result.returncode != 0 or not address:
-        raise RunnerError("Could not resolve the service container address.")
-    return address
-
-
-def _wait_for_healthcheck(address: str, port: int, path: str) -> None:
-    url = f"http://{address}:{port}{path}"
-    deadline = time.monotonic() + 45
-    last_error = "no response"
-    while time.monotonic() < deadline:
-        try:
-            with urllib.request.urlopen(url, timeout=2) as response:
-                if 200 <= response.status < 400:
-                    return
-                last_error = f"HTTP {response.status}"
-        except (urllib.error.URLError, TimeoutError, OSError) as error:
-            last_error = str(error)
-        time.sleep(1)
-    raise RunnerError(f"Service healthcheck failed: {last_error}")
+    probe = _docker(
+        [
+            "run",
+            "--rm",
+            "--label",
+            RUNNER_LABEL,
+            "--network",
+            network_name,
+            "--memory",
+            "64m",
+            "--memory-swap",
+            "64m",
+            "--cpus",
+            "0.25",
+            "--pids-limit",
+            "32",
+            "--ulimit",
+            "nofile=64:64",
+            "--init",
+            "--ipc",
+            "none",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--read-only",
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,size=8m",
+            "--user",
+            RUNNER_USER,
+            "--env",
+            "HOME=/tmp",
+            JURY_IMAGE,
+            "python",
+            "-c",
+            probe_code,
+            target,
+        ],
+        timeout=55,
+        max_output=16 * 1024,
+    )
+    if probe.returncode != 0:
+        detail = probe.output.strip() or "no response"
+        raise RunnerError(f"Service healthcheck failed: {detail}")
 
 
 def _output_tokens(output: str) -> set[str]:
@@ -597,8 +692,17 @@ def _docker(
 ) -> CommandResult:
     WORK_DIR.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="docker-cli-", dir=WORK_DIR) as home:
+        settings = get_runner_settings()
         environment = os.environ.copy()
-        environment["DOCKER_HOST"] = DOCKER_HOST
+        environment["DOCKER_HOST"] = settings.docker_host
+        if settings.tls_verify:
+            environment["DOCKER_TLS_VERIFY"] = "1"
+        else:
+            environment.pop("DOCKER_TLS_VERIFY", None)
+        if settings.cert_path:
+            environment["DOCKER_CERT_PATH"] = settings.cert_path
+        else:
+            environment.pop("DOCKER_CERT_PATH", None)
         environment["HOME"] = home
         environment["DOCKER_CONFIG"] = str(Path(home) / ".docker")
         return _run_command(

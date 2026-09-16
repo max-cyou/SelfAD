@@ -256,6 +256,8 @@ def _migrate_existing_sqlite_schema() -> None:
         repository_event_column_types = {
             "attempts": "INTEGER NOT NULL DEFAULT 0",
             "message": "TEXT NOT NULL DEFAULT ''",
+            "processing_token": "VARCHAR(64)",
+            "processing_started_at": "DATETIME",
         }
         for column_name, column_type in repository_event_column_types.items():
             if column_name not in repository_event_columns:
@@ -265,6 +267,73 @@ def _migrate_existing_sqlite_schema() -> None:
                         f"ADD COLUMN {column_name} {column_type}"
                     )
                 )
+
+        repository_event_sql = connection.execute(
+            text(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type = 'table' AND name = 'repository_events'"
+            )
+        ).scalar() or ""
+        if "'processing'" not in repository_event_sql:
+            connection.execute(
+                text(
+                    "CREATE TABLE repository_events_new ("
+                    "id INTEGER NOT NULL PRIMARY KEY, "
+                    "delivery_id VARCHAR(255) NOT NULL UNIQUE, "
+                    "repository_path VARCHAR(255) NOT NULL, "
+                    "ref VARCHAR(512) NOT NULL, "
+                    "commit_sha VARCHAR(64) NOT NULL, "
+                    "status VARCHAR(10) NOT NULL, "
+                    "attempts INTEGER NOT NULL DEFAULT 0, "
+                    "processing_token VARCHAR(64), "
+                    "processing_started_at DATETIME, "
+                    "message TEXT NOT NULL DEFAULT '', "
+                    "received_at DATETIME NOT NULL, "
+                    "processed_at DATETIME, "
+                    "CONSTRAINT repository_event_status "
+                    "CHECK (status IN ('pending', 'processing', 'done', 'failed'))"
+                    ")"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO repository_events_new ("
+                    "id, delivery_id, repository_path, ref, commit_sha, status, "
+                    "attempts, processing_token, processing_started_at, message, "
+                    "received_at, processed_at"
+                    ") SELECT id, delivery_id, repository_path, ref, commit_sha, "
+                    "status, attempts, processing_token, processing_started_at, "
+                    "message, received_at, processed_at FROM repository_events"
+                )
+            )
+            connection.execute(text("DROP TABLE repository_events"))
+            connection.execute(
+                text("ALTER TABLE repository_events_new RENAME TO repository_events")
+            )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX ix_repository_events_delivery_id "
+                    "ON repository_events (delivery_id)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX ix_repository_events_repository_path "
+                    "ON repository_events (repository_path)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX ix_repository_events_status "
+                    "ON repository_events (status)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX ix_repository_events_processing_token "
+                    "ON repository_events (processing_token)"
+                )
+            )
 
         scoring_columns = {
             column["name"] for column in schema.get_columns("scoring_settings")

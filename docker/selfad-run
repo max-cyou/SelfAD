@@ -8,6 +8,14 @@ export SELFAD_GITEA_INTERNAL_URL="${SELFAD_GITEA_INTERNAL_URL:-http://127.0.0.1:
 export SELFAD_GITEA_PUBLIC_URL="${SELFAD_GITEA_PUBLIC_URL:-http://localhost:8929}"
 export SELFAD_GITEA_TOKEN_FILE="${SELFAD_GITEA_TOKEN_FILE:-${SELFAD_DATA_DIR}/gitea_token}"
 export SELFAD_GITEA_VERIFY_TLS="${SELFAD_GITEA_VERIFY_TLS:-false}"
+export SELFAD_RUNNER_DOCKER_HOST="${SELFAD_RUNNER_DOCKER_HOST:-unix:///run/selfad-docker/docker.sock}"
+export DOCKER_HOST="${SELFAD_RUNNER_DOCKER_HOST}"
+if [[ "${SELFAD_RUNNER_TLS_VERIFY:-false}" =~ ^(1|true|yes|on)$ ]]; then
+    export DOCKER_TLS_VERIFY=1
+fi
+if [[ -n "${SELFAD_RUNNER_CERT_PATH:-}" ]]; then
+    export DOCKER_CERT_PATH="${SELFAD_RUNNER_CERT_PATH}"
+fi
 
 readonly gitea_url="${SELFAD_GITEA_INTERNAL_URL}"
 readonly token_file="${SELFAD_GITEA_TOKEN_FILE}"
@@ -82,7 +90,7 @@ until docker --host unix:///run/selfad-docker/docker.sock info >/dev/null 2>&1; 
     sleep 5
 done
 
-echo "Internal Docker runner is ready."
+echo "Configured Docker runner is ready."
 exec su-exec selfad:selfad \
     /opt/selfad/venv/bin/uvicorn \
     main:app \

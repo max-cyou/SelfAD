@@ -557,6 +557,18 @@ input[type="checkbox"] {
   font-size: 14px;
 }
 
+.runner-notice {
+  color: var(--warning) !important;
+}
+
+.runner-notice--error {
+  color: var(--danger) !important;
+}
+
+.runner-notice--ready {
+  color: var(--success) !important;
+}
+
 .users-search {
   flex: 0 1 260px;
   width: 260px;

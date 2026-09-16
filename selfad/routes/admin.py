@@ -52,6 +52,7 @@ from selfad.models import (
     User,
 )
 from selfad.participants import provision_participant_service
+from selfad.runner import runner_is_available, runner_mode
 from selfad.scoring import PENALTY_MODES, REWARD_MODES, get_scoring_settings
 from selfad.security import hash_password
 from selfad.service_contract import (
@@ -374,6 +375,8 @@ def render_admin(
             "gitea_configured": gitea_settings.configured,
             "gitea_public_url": gitea_settings.public_url,
             "pending_pushes": pending_pushes,
+            "runner_mode": runner_mode(),
+            "runner_ready": runner_is_available(),
             **branding,
         },
         status_code=status_code,

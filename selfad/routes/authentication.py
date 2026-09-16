@@ -9,7 +9,8 @@ from selfad.contest import STARTED, contest_state
 from selfad.database import get_session
 from selfad.gitea import GiteaUnavailable, authenticate_gitea_user
 from selfad.models import InstanceConfig, User
-from selfad.settings import get_gitea_settings
+from selfad.rate_limit import client_key, rate_limiter
+from selfad.settings import get_gitea_settings, get_rate_limit
 from selfad.web import templates
 
 
@@ -74,6 +75,19 @@ def submit_login(
         return RedirectResponse(url="/setup", status_code=303)
 
     username = username.strip()
+    client_host = request.client.host if request.client else None
+    if not rate_limiter.allow(
+        client_key(client_host, f"login:{username.lower()[:32]}"),
+        limit=get_rate_limit("SELFAD_LOGIN_RATE_LIMIT", default=12),
+        window_seconds=60,
+    ):
+        return render_login(
+            request,
+            session,
+            username=username,
+            error="Too many sign-in attempts. Try again in a minute.",
+            status_code=429,
+        )
     local_user = session.scalar(select(User).where(User.username == username))
     gitea_username = (
         local_user.gitea_username

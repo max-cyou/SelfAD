@@ -25,6 +25,12 @@ chown root:selfad "${password_file}"
 chmod 0440 "${password_file}"
 
 echo "SelfAD and Gitea will run inside this container."
+if [ "${SELFAD_ENABLE_INTERNAL_RUNNER:-false}" = "true" ] \
+    || [ "${SELFAD_ENABLE_INTERNAL_RUNNER:-false}" = "1" ]; then
+    echo "Runner mode: internal development runner (not for public events)."
+else
+    echo "Runner mode: external (${SELFAD_RUNNER_DOCKER_HOST:-not configured})."
+fi
 echo "SelfAD: http://localhost:8000"
 echo "Gitea: ${SELFAD_GITEA_PUBLIC_URL:-http://localhost:8929}"
 echo "Gitea login: root"

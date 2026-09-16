@@ -119,6 +119,7 @@ class ServiceValidationStatus(str, Enum):
 
 class RepositoryEventStatus(str, Enum):
     PENDING = "pending"
+    PROCESSING = "processing"
     DONE = "done"
     FAILED = "failed"
 
@@ -339,6 +340,15 @@ class RepositoryEvent(Base):
         nullable=False,
     )
     attempts: Mapped[int] = mapped_column(default=0, nullable=False)
+    processing_token: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+    )
+    processing_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     message: Mapped[str] = mapped_column(Text, default="", nullable=False)
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

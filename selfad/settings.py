@@ -23,6 +23,18 @@ class GiteaSettings:
         return bool(self.private_token)
 
 
+@dataclass(frozen=True)
+class RunnerSettings:
+    docker_host: str
+    tls_verify: bool
+    cert_path: str | None
+    internal_runner_enabled: bool
+
+    @property
+    def uses_internal_runner(self) -> bool:
+        return self.docker_host.startswith("unix:///run/selfad-docker/")
+
+
 def get_session_secret() -> str:
     configured_secret = os.getenv("SELFAD_SECRET_KEY")
     if configured_secret:
@@ -125,6 +137,44 @@ def get_gitea_root_password() -> str | None:
         return Path(password_file).read_text(encoding="utf-8").strip() or None
     except (FileNotFoundError, PermissionError):
         return None
+
+
+def get_runner_settings() -> RunnerSettings:
+    docker_host = os.getenv(
+        "SELFAD_RUNNER_DOCKER_HOST",
+        "unix:///run/selfad-docker/docker.sock",
+    ).strip()
+    if not docker_host:
+        raise RuntimeError("SELFAD_RUNNER_DOCKER_HOST cannot be empty")
+    tls_verify = os.getenv("SELFAD_RUNNER_TLS_VERIFY", "false").lower()
+    cert_path = os.getenv("SELFAD_RUNNER_CERT_PATH", "").strip() or None
+    internal_runner = os.getenv("SELFAD_ENABLE_INTERNAL_RUNNER", "false").lower()
+    return RunnerSettings(
+        docker_host=docker_host,
+        tls_verify=tls_verify in {"1", "true", "yes", "on"},
+        cert_path=cert_path,
+        internal_runner_enabled=internal_runner in {"1", "true", "yes", "on"},
+    )
+
+
+def get_metrics_token() -> str | None:
+    return os.getenv("SELFAD_METRICS_TOKEN", "").strip() or None
+
+
+def get_rate_limit(name: str, *, default: int) -> int:
+    raw_value = os.getenv(name, str(default)).strip()
+    try:
+        return min(10_000, max(1, int(raw_value)))
+    except ValueError:
+        return default
+
+
+def get_worker_concurrency() -> int:
+    raw_value = os.getenv("SELFAD_WORKER_CONCURRENCY", "1").strip()
+    try:
+        return min(16, max(1, int(raw_value)))
+    except ValueError:
+        return 1
 
 
 def _read_session_secret() -> str:

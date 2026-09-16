@@ -35,8 +35,13 @@ from selfad.models import (
     User,
 )
 from selfad.participants import provision_participant_service
+from selfad.rate_limit import client_key, rate_limiter
 from selfad.security import hash_password, verify_password
-from selfad.settings import get_gitea_settings, get_gitea_webhook_secret
+from selfad.settings import (
+    get_gitea_settings,
+    get_gitea_webhook_secret,
+    get_rate_limit,
+)
 from selfad.web import templates
 
 
@@ -309,6 +314,17 @@ async def register(
         return RedirectResponse(
             url="/services" if contest_state(config) == STARTED else "/",
             status_code=303,
+        )
+
+    client_host = request.client.host if request.client else None
+    if not rate_limiter.allow(
+        client_key(client_host, "registration"),
+        limit=get_rate_limit("SELFAD_REGISTRATION_RATE_LIMIT", default=6),
+        window_seconds=60,
+    ):
+        return HTMLResponse(
+            "Too many registration attempts. Try again in a minute.",
+            status_code=429,
         )
 
     form = await request.form()

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -47,6 +48,23 @@ class RepositoryBatch:
     participant_service_id: int | None = None
     repository_path: str | None = None
     commit_sha: str | None = None
+
+
+def recover_interrupted_repository_events() -> int:
+    """Return jobs left in-flight by a stopped control-plane process to queue."""
+    with SessionLocal() as session:
+        recovered = session.execute(
+            update(RepositoryEvent)
+            .where(RepositoryEvent.status == RepositoryEventStatus.PROCESSING)
+            .values(
+                status=RepositoryEventStatus.PENDING,
+                processing_token=None,
+                processing_started_at=None,
+                message="Recovered after the worker restarted.",
+            )
+        )
+        session.commit()
+        return recovered.rowcount or 0
 
 
 async def run_repository_worker(stop_event: asyncio.Event) -> None:
@@ -269,9 +287,36 @@ def _claim_repository_batch() -> RepositoryBatch | None:
                 event.processed_at = datetime.now(timezone.utc)
                 session.commit()
                 return RepositoryBatch((event.id,), -1, -1)
-            event_ids = tuple(session.scalars(select(RepositoryEvent.id).where(RepositoryEvent.status == RepositoryEventStatus.PENDING, RepositoryEvent.repository_path == event.repository_path)).all())
-            latest_event = session.scalar(select(RepositoryEvent).where(RepositoryEvent.id.in_(event_ids)).order_by(RepositoryEvent.id.desc()))
-            session.execute(update(RepositoryEvent).where(RepositoryEvent.id.in_(event_ids)).values(attempts=RepositoryEvent.attempts + 1, message="Participant check started."))
+            claim_token = uuid.uuid4().hex
+            session.execute(
+                update(RepositoryEvent)
+                .where(
+                    RepositoryEvent.status == RepositoryEventStatus.PENDING,
+                    RepositoryEvent.repository_path == event.repository_path,
+                )
+                .values(
+                    status=RepositoryEventStatus.PROCESSING,
+                    attempts=RepositoryEvent.attempts + 1,
+                    processing_token=claim_token,
+                    processing_started_at=datetime.now(timezone.utc),
+                    message="Participant check started.",
+                )
+            )
+            event_ids = tuple(
+                session.scalars(
+                    select(RepositoryEvent.id)
+                    .where(RepositoryEvent.processing_token == claim_token)
+                    .order_by(RepositoryEvent.id)
+                ).all()
+            )
+            latest_event = session.scalar(
+                select(RepositoryEvent)
+                .where(RepositoryEvent.processing_token == claim_token)
+                .order_by(RepositoryEvent.id.desc())
+            )
+            if not event_ids or latest_event is None:
+                session.rollback()
+                return None
             if event.repository_path == participant_service.attack_repository_path:
                 participant_service.attack_status = ParticipantRepositoryStatus.RUNNING
                 participant_service.attack_message = "Checking the latest attack push."
@@ -281,26 +326,34 @@ def _claim_repository_batch() -> RepositoryBatch | None:
             session.commit()
             return RepositoryBatch(event_ids, service.id, service.repository_generation, participant_service.id, event.repository_path, latest_event.commit_sha if latest_event else None)
 
-        event_ids = tuple(
-            session.scalars(
-                select(RepositoryEvent.id).where(
-                    RepositoryEvent.status == RepositoryEventStatus.PENDING,
-                    or_(
-                        RepositoryEvent.repository_path == service.repository_path,
-                        RepositoryEvent.repository_path
-                        == service.jury_repository_path,
-                    ),
-                )
-            ).all()
-        )
+        claim_token = uuid.uuid4().hex
         session.execute(
             update(RepositoryEvent)
-            .where(RepositoryEvent.id.in_(event_ids))
+            .where(
+                RepositoryEvent.status == RepositoryEventStatus.PENDING,
+                or_(
+                    RepositoryEvent.repository_path == service.repository_path,
+                    RepositoryEvent.repository_path == service.jury_repository_path,
+                ),
+            )
             .values(
+                status=RepositoryEventStatus.PROCESSING,
                 attempts=RepositoryEvent.attempts + 1,
+                processing_token=claim_token,
+                processing_started_at=datetime.now(timezone.utc),
                 message="Repository check started.",
             )
         )
+        event_ids = tuple(
+            session.scalars(
+                select(RepositoryEvent.id)
+                .where(RepositoryEvent.processing_token == claim_token)
+                .order_by(RepositoryEvent.id)
+            ).all()
+        )
+        if not event_ids:
+            session.rollback()
+            return None
         session.commit()
         return RepositoryBatch(
             event_ids,
@@ -550,6 +603,8 @@ def _finish_events(
         .where(RepositoryEvent.id.in_(event_ids))
         .values(
             status=status,
+            processing_token=None,
+            processing_started_at=None,
             message=message[:2_000],
             processed_at=datetime.now(timezone.utc),
         )

@@ -3,6 +3,14 @@
 exec 2>&1
 set -eu
 
+if [ "${SELFAD_ENABLE_INTERNAL_RUNNER:-false}" != "true" ] \
+    && [ "${SELFAD_ENABLE_INTERNAL_RUNNER:-false}" != "1" ] \
+    && [ "${SELFAD_ENABLE_INTERNAL_RUNNER:-false}" != "yes" ] \
+    && [ "${SELFAD_ENABLE_INTERNAL_RUNNER:-false}" != "on" ]; then
+    echo "Internal Docker runner is disabled; using SELFAD_RUNNER_DOCKER_HOST."
+    exec sleep infinity
+fi
+
 state_dir="/data/selfad/docker"
 runtime_dir="/run/selfad-docker"
 

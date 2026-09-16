@@ -76,6 +76,13 @@
                   <div>
                     <h2 id="general-title">General</h2>
                     <p>Primary settings for this instance.</p>
+                    {% if runner_mode == 'internal' %}
+                      <p class="runner-notice">Runner: internal development mode. Use an external isolated runner before a public CTF.</p>
+                    {% elif not runner_ready %}
+                      <p class="runner-notice runner-notice--error">Runner: unavailable. Repository checks are paused.</p>
+                    {% else %}
+                      <p class="runner-notice runner-notice--ready">Runner: external and ready.</p>
+                    {% endif %}
                   </div>
                 </div>
                 <form class="general-settings-form" method="post" action="{{ url_for('update_registration') }}">
