@@ -41,6 +41,25 @@ from selfad.worker import recover_interrupted_repository_events, run_repository_
 logger = logging.getLogger(__name__)
 
 
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; base-uri 'self'; object-src 'none'; "
+        "frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; "
+        "style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
+    ),
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Permissions-Policy": "camera=(), geolocation=(), microphone=()",
+}
+
+
+def apply_security_headers(response):
+    for name, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    return response
+
+
 def reconcile_administrator_gitea_identity() -> None:
     settings = get_gitea_settings()
     if not settings.configured:
@@ -121,6 +140,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="SelfAD", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def security_headers(request, call_next):
+        return apply_security_headers(await call_next(request))
+
     trusted_proxy_hosts = get_trusted_proxy_hosts()
     if trusted_proxy_hosts:
         app.add_middleware(

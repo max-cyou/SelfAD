@@ -90,10 +90,11 @@ network-level rate limit in the reverse proxy because an in-process limit is
 not shared between replicas.
 
 `SELFAD_WORKER_CONCURRENCY` defaults to `1`, which is appropriate for a local
-machine. Increase it only after measuring the external runner capacity. For
-example, four runner VMs with one job each can be driven by four worker tasks;
-set matching CPU/RAM quotas at the runner level rather than overcommitting the
-control plane.
+machine and one runner. Increase it only after measuring the capacity of the
+single configured runner endpoint. A pool of runner VMs requires a dispatcher
+or multiple isolated control-plane instances; SelfAD does not silently spread
+one process across arbitrary Docker daemons. Set matching CPU/RAM quotas at the
+runner level rather than overcommitting the control plane.
 
 SelfAD uses PostgreSQL when `SELFAD_DATABASE_URL` is supplied. Create a
 dedicated `selfad` database and account; do not share it with Gitea, because
