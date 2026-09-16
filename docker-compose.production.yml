@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: selfad
+      POSTGRES_USER: ${SELFAD_POSTGRES_USER:-selfad}
+      POSTGRES_PASSWORD: ${SELFAD_POSTGRES_PASSWORD:?Set SELFAD_POSTGRES_PASSWORD in .env}
+    volumes:
+      - selfad-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+
+  selfad:
+    build: .
+    image: selfad:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${SELFAD_HTTP_PORT:-8000}:8000"
+      - "${SELFAD_GITEA_HTTP_PORT:-8929}:8929"
+      - "${SELFAD_GITEA_SSH_PORT:-2224}:22"
+    environment:
+      SELFAD_ENABLE_INTERNAL_RUNNER: "false"
+      SELFAD_DATABASE_URL: postgresql+psycopg://${SELFAD_POSTGRES_USER:-selfad}:${SELFAD_POSTGRES_PASSWORD}@postgres:5432/selfad
+      SELFAD_RUNNER_DOCKER_HOST: ${SELFAD_RUNNER_DOCKER_HOST:?Set the remote TLS Docker endpoint}
+      SELFAD_RUNNER_TLS_VERIFY: "true"
+      SELFAD_RUNNER_CERT_PATH: /run/selfad-runner-tls
+      SELFAD_SECURE_COOKIES: "true"
+      SELFAD_GITEA_PUBLIC_URL: ${SELFAD_GITEA_PUBLIC_URL:?Set the public Gitea URL}
+      SELFAD_GITEA_WEBHOOK_URL: http://127.0.0.1:8000/hooks/gitea
+      SELFAD_METRICS_TOKEN: ${SELFAD_METRICS_TOKEN:?Set a long random token}
+      SELFAD_SECRET_KEY: ${SELFAD_SECRET_KEY:?Set a 32+ character random value}
+      SELFAD_WORKER_CONCURRENCY: ${SELFAD_WORKER_CONCURRENCY:-1}
+    volumes:
+      - selfad-data:/data
+      - ${SELFAD_RUNNER_TLS_DIR:?Set the directory with ca.pem, cert.pem and key.pem}:/run/selfad-runner-tls:ro
+    mem_limit: 1g
+    shm_size: 64m
+
+volumes:
+  selfad-data:
+  selfad-postgres:

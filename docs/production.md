@@ -28,6 +28,24 @@ workloads.
 
 ## Control-plane start
 
+For the supported production profile, copy `.env.production.example` to `.env`,
+replace every secret and public URL, then run:
+
+```bash
+docker compose -f docker-compose.production.yml up -d --build
+```
+
+This creates a dedicated PostgreSQL volume and keeps it off the public network.
+The control plane is deliberately **not** privileged and does not mount a Docker
+socket. It requires a separate runner endpoint and its client TLS directory.
+Put the three runner client files in the directory named by
+`SELFAD_RUNNER_TLS_DIR`.
+
+Place the published HTTP ports behind a TLS reverse proxy. If the proxy forwards
+client addresses, set `SELFAD_TRUST_PROXY_HEADERS=true` and set
+`SELFAD_TRUSTED_PROXY_HOSTS` to that proxy's IP address (or addresses). Do not
+use `*`: forwarded headers are used for per-IP sign-in and registration limits.
+
 Build the image as usual, then point it at the remote Docker daemon. Mount the
 three client TLS files at `/run/selfad-runner-tls` as read-only.
 

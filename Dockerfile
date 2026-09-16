@@ -46,9 +46,11 @@ COPY selfad ./selfad
 COPY docker/entrypoint.sh /opt/selfad/entrypoint.sh
 COPY docker/selfad-run /etc/s6/selfad/run
 COPY docker/dockerd-run /etc/s6/dockerd/run
+COPY docker/healthcheck.sh /opt/selfad/healthcheck.sh
 
 RUN chmod 0755 \
         /opt/selfad/entrypoint.sh \
+        /opt/selfad/healthcheck.sh \
         /etc/s6/selfad/run \
         /etc/s6/dockerd/run \
     && chown -R root:root /app /opt/selfad /etc/s6/selfad
@@ -56,9 +58,6 @@ RUN chmod 0755 \
 EXPOSE 8000 8929 22
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=2m --retries=5 \
-    CMD curl --fail --silent http://127.0.0.1:8929/api/healthz >/dev/null \
-        && curl --fail --silent http://127.0.0.1:8000/ >/dev/null \
-        && docker --host unix:///run/selfad-docker/docker.sock info >/dev/null 2>&1 \
-        || exit 1
+    CMD /opt/selfad/healthcheck.sh
 
 ENTRYPOINT ["/opt/selfad/entrypoint.sh"]

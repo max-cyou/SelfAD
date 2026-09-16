@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from selfad.database import SessionLocal, initialize_database
 from selfad.gitea import (
@@ -28,6 +29,7 @@ from selfad.settings import (
     get_gitea_settings,
     get_gitea_webhook_secret,
     get_session_secret,
+    get_trusted_proxy_hosts,
     get_worker_concurrency,
     use_secure_cookies,
 )
@@ -119,6 +121,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="SelfAD", lifespan=lifespan)
+    trusted_proxy_hosts = get_trusted_proxy_hosts()
+    if trusted_proxy_hosts:
+        app.add_middleware(
+            ProxyHeadersMiddleware,
+            trusted_hosts=trusted_proxy_hosts,
+        )
     app.add_middleware(
         SessionMiddleware,
         secret_key=get_session_secret(),

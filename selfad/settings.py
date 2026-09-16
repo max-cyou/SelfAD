@@ -98,6 +98,24 @@ def use_secure_cookies() -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
 
 
+def get_trusted_proxy_hosts() -> list[str] | None:
+    """Return explicit trusted proxy addresses, or disable forwarded headers.
+
+    Trusting ``X-Forwarded-For`` from every client lets an attacker evade
+    per-IP limits. Production deployments must opt in and name their proxy.
+    """
+    enabled = os.getenv("SELFAD_TRUST_PROXY_HEADERS", "false").lower()
+    if enabled not in {"1", "true", "yes", "on"}:
+        return None
+    raw_hosts = os.getenv("SELFAD_TRUSTED_PROXY_HOSTS", "").strip()
+    hosts = [host.strip() for host in raw_hosts.split(",") if host.strip()]
+    if not hosts:
+        raise RuntimeError(
+            "SELFAD_TRUSTED_PROXY_HOSTS is required when proxy headers are enabled"
+        )
+    return hosts
+
+
 def get_gitea_settings() -> GiteaSettings:
     internal_url = os.getenv(
         "SELFAD_GITEA_INTERNAL_URL",
