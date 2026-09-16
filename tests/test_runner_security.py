@@ -1,6 +1,5 @@
 import os
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from selfad.runner import (
@@ -46,7 +45,6 @@ class RunnerSecurityTests(unittest.TestCase):
         _run_jury_script(
             container_name="selfad-test-script",
             network_name="selfad-test-network",
-            jury_path=Path("/tmp/jury"),
             script_name="exploit.py",
             target="http://target:8080",
             image="python:3.13-alpine",
@@ -60,6 +58,7 @@ class RunnerSecurityTests(unittest.TestCase):
         self.assertIn("--user", arguments)
         self.assertEqual(arguments[arguments.index("--user") + 1], RUNNER_USER)
         self.assertIn("--network", arguments)
+        self.assertNotIn("--volume", arguments)
         self.assertEqual(
             arguments[arguments.index("--network") + 1],
             "selfad-test-network",

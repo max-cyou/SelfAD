@@ -197,6 +197,7 @@ def run_service_runtime_check(
                 jury_requirements,
                 jury_image_name,
                 job_path / "jury-runtime",
+                jury_path,
             )
             if jury_build is not None and jury_build.returncode != 0:
                 return RuntimeCheckResult(
@@ -213,6 +214,7 @@ def run_service_runtime_check(
                     exploit_runtime_requirements,
                     exploit_image_name,
                     job_path / "attack-runtime",
+                    exploit_path,
                 )
                 if exploit_build is not None and exploit_build.returncode != 0:
                     return RuntimeCheckResult(
@@ -295,7 +297,6 @@ def run_service_runtime_check(
                 checker = _run_jury_script(
                     container_name=f"selfad-checker-{job_id}",
                     network_name=network_name,
-                    jury_path=jury_path,
                     script_name="checker.py",
                     target=target,
                     image=jury_image,
@@ -316,7 +317,6 @@ def run_service_runtime_check(
             injector = _run_jury_script(
                 container_name=injector_name,
                 network_name=network_name,
-                jury_path=jury_path,
                 script_name="inject.py",
                 target=target,
                 image=jury_image,
@@ -350,7 +350,6 @@ def run_service_runtime_check(
             exploit = _run_jury_script(
                 container_name=exploit_name,
                 network_name=network_name,
-                jury_path=exploit_path,
                 script_name="exploit.py",
                 target=target,
                 image=exploit_image,
@@ -455,7 +454,6 @@ def _run_jury_script(
     *,
     container_name: str,
     network_name: str,
-    jury_path: Path,
     script_name: str,
     target: str,
     image: str,
@@ -492,8 +490,6 @@ def _run_jury_script(
             "/tmp:rw,noexec,nosuid,size=16m",
             "--user",
             RUNNER_USER,
-            "--volume",
-            f"{jury_path}:/workspace:ro",
             "--workdir",
             "/workspace",
             "--env",
@@ -565,6 +561,7 @@ def _prepare_runtime_image(
     requirements: bytes | None,
     image_name: str,
     context: Path,
+    scripts_path: Path,
 ) -> tuple[str, CommandResult | None]:
     base_image = _docker(["image", "inspect", JURY_IMAGE], timeout=15)
     if base_image.returncode != 0:
@@ -576,18 +573,21 @@ def _prepare_runtime_image(
         if pull.returncode != 0:
             raise RunnerError("Could not prepare the fixed jury runtime image.")
 
-    if not requirements or not requirements.strip():
-        return JURY_IMAGE, None
-
-    _validate_requirements(requirements, label="Requirements")
+    if requirements and requirements.strip():
+        _validate_requirements(requirements, label="Requirements")
     context.mkdir()
-    (context / "requirements.txt").write_bytes(requirements)
+    shutil.copytree(scripts_path, context / "workspace")
+    dockerfile = "FROM python:3.13-alpine\n"
+    if requirements and requirements.strip():
+        (context / "requirements.txt").write_bytes(requirements)
+        dockerfile += (
+            "COPY requirements.txt /tmp/selfad-requirements.txt\n"
+            "RUN python -m pip install --no-cache-dir --disable-pip-version-check "
+            "-r /tmp/selfad-requirements.txt "
+            "&& rm /tmp/selfad-requirements.txt\n"
+        )
     (context / "Dockerfile").write_text(
-        "FROM python:3.13-alpine\n"
-        "COPY requirements.txt /tmp/selfad-requirements.txt\n"
-        "RUN python -m pip install --no-cache-dir --disable-pip-version-check "
-        "-r /tmp/selfad-requirements.txt "
-        "&& rm /tmp/selfad-requirements.txt\n",
+        dockerfile + "COPY workspace /workspace\n",
         encoding="utf-8",
     )
     build = _docker(
