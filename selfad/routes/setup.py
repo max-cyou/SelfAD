@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from selfad.auth import csrf_token_is_valid, get_csrf_token
 from selfad.database import get_session
 from selfad.models import BrandingSettings, InstanceConfig, User
 from selfad.security import hash_password
@@ -39,6 +40,7 @@ def render_setup(
             "change_title": change_title,
             "remove_standard_logo": remove_standard_logo,
             "errors": errors or {},
+            "csrf_token": get_csrf_token(request),
         },
         status_code=status_code,
     )
@@ -105,11 +107,19 @@ def submit_setup(
     admin_password_confirm: str = Form(...),
     change_title: bool = Form(False),
     remove_standard_logo: bool = Form(False),
+    csrf_token: str = Form(...),
     session: Session = Depends(get_session),
 ):
     config = session.get(InstanceConfig, 1)
     if config and config.setup_complete:
         return RedirectResponse(url="/", status_code=303)
+
+    if not csrf_token_is_valid(request, csrf_token):
+        return render_setup(
+            request,
+            errors={"_form": "Invalid setup form. Reload the page and try again."},
+            status_code=403,
+        )
 
     site_name = site_name.strip()
     admin_username = admin_username.strip()

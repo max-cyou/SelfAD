@@ -3,7 +3,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from selfad.auth import csrf_token_is_valid, get_session_user, sign_in, sign_out
+from selfad.auth import (
+    csrf_token_is_valid,
+    get_csrf_token,
+    get_session_user,
+    sign_in,
+    sign_out,
+)
 from selfad.branding import get_branding_context
 from selfad.contest import STARTED, contest_state
 from selfad.database import get_session
@@ -33,6 +39,7 @@ def render_login(
             "title": f"Sign in · {branding['brand_title']}",
             "username": username,
             "error": error,
+            "csrf_token": get_csrf_token(request),
             **branding,
         },
         status_code=status_code,
@@ -68,6 +75,7 @@ def submit_login(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
+    csrf_token: str = Form(...),
     session: Session = Depends(get_session),
 ):
     branding = get_branding_context(session)
@@ -75,6 +83,14 @@ def submit_login(
         return RedirectResponse(url="/setup", status_code=303)
 
     username = username.strip()
+    if not csrf_token_is_valid(request, csrf_token):
+        return render_login(
+            request,
+            session,
+            username=username,
+            error="Invalid sign-in form. Reload the page and try again.",
+            status_code=403,
+        )
     client_host = request.client.host if request.client else None
     if not rate_limiter.allow(
         client_key(client_host, f"login:{username.lower()[:32]}"),
