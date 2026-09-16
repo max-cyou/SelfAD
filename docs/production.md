@@ -77,7 +77,7 @@ Do not publish Docker TCP without TLS, and firewall it so only the SelfAD
 control-plane address can reach it.
 
 `GET /ready` must return HTTP 200 before opening registration. It verifies the
-Gitea API token and the configured runner.
+SelfAD database, Gitea API token and configured runner.
 
 Set a long random `SELFAD_METRICS_TOKEN` and scrape `GET /metrics` with
 `Authorization: Bearer <token>`. The endpoint exposes queue state, issued

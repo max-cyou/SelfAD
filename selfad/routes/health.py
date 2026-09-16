@@ -2,12 +2,12 @@ import hmac
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from selfad.gitea import GiteaError, get_authenticated_user
 from selfad.runner import runner_is_available, runner_mode
-from selfad.database import get_session
+from selfad.database import engine, get_session
 from selfad.models import ParticipantService, RepositoryEvent
 from selfad.settings import get_gitea_settings, get_metrics_token
 
@@ -22,6 +22,13 @@ async def health():
 
 @router.get("/ready")
 def readiness():
+    database_ready = False
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        database_ready = True
+    except Exception:
+        pass
     gitea_ready = False
     try:
         get_authenticated_user(get_gitea_settings())
@@ -30,7 +37,10 @@ def readiness():
         pass
     runner_ready = runner_is_available()
     payload = {
-        "status": "ok" if gitea_ready and runner_ready else "degraded",
+        "status": (
+            "ok" if database_ready and gitea_ready and runner_ready else "degraded"
+        ),
+        "database": database_ready,
         "gitea": gitea_ready,
         "runner": runner_ready,
         "runner_mode": runner_mode(),
