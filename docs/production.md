@@ -46,6 +46,11 @@ client addresses, set `SELFAD_TRUST_PROXY_HEADERS=true` and set
 `SELFAD_TRUSTED_PROXY_HOSTS` to that proxy's IP address (or addresses). Do not
 use `*`: forwarded headers are used for per-IP sign-in and registration limits.
 
+Set `SELFAD_GITEA_PUBLIC_URL`, `SELFAD_GITEA_DOMAIN`,
+`SELFAD_GITEA_SSH_DOMAIN` and `SELFAD_GITEA_SSH_PUBLIC_PORT` to the values
+participants actually use. They control clone URLs displayed by Gitea; leaving
+the image defaults would publish `localhost` links.
+
 Build the image as usual, then point it at the remote Docker daemon. Mount the
 three client TLS files at `/run/selfad-runner-tls` as read-only.
 
@@ -115,7 +120,15 @@ plane volumes or host Docker sockets.
    ```
 
    Keep the archive off the control-plane host as well. Restore only onto a
-   fresh, stopped volume after testing the archive in an isolated environment.
+   fresh volume after testing the archive in an isolated environment:
+
+   ```bash
+   ./scripts/restore-volume.sh /srv/backups/selfad/selfad-data-YYYYMMDDTHHMMSSZ.tar.gz selfad-data-restore-test
+   ```
+
+   The restore script refuses to overwrite an existing volume. Start a
+   disposable SelfAD instance using `selfad-data-restore-test` before relying
+   on the backup for an event.
 2. Verify `https://ctf.example/ready` is `200` and reports `runner_mode` as
    `external`.
 3. Push and check a known vulnerable service, an exploit and a one-line fix

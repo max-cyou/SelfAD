@@ -35,6 +35,10 @@ services:
       SELFAD_SECURE_COOKIES: "true"
       SELFAD_GITEA_PUBLIC_URL: ${SELFAD_GITEA_PUBLIC_URL:?Set the public Gitea URL}
       SELFAD_GITEA_WEBHOOK_URL: http://127.0.0.1:8000/hooks/gitea
+      GITEA__server__ROOT_URL: ${SELFAD_GITEA_PUBLIC_URL:?Set the public Gitea URL}/
+      GITEA__server__DOMAIN: ${SELFAD_GITEA_DOMAIN:?Set the public Gitea hostname}
+      GITEA__server__SSH_DOMAIN: ${SELFAD_GITEA_SSH_DOMAIN:?Set the public Gitea SSH hostname}
+      GITEA__server__SSH_PORT: ${SELFAD_GITEA_SSH_PUBLIC_PORT:-2224}
       SELFAD_METRICS_TOKEN: ${SELFAD_METRICS_TOKEN:?Set a long random token}
       SELFAD_SECRET_KEY: ${SELFAD_SECRET_KEY:?Set a 32+ character random value}
       SELFAD_WORKER_CONCURRENCY: ${SELFAD_WORKER_CONCURRENCY:-1}
