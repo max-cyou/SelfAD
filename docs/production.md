@@ -131,7 +131,12 @@ plane volumes or host Docker sockets.
    disposable SelfAD instance using `selfad-data-restore-test` before relying
    on the backup for an event.
 2. Verify `https://ctf.example/ready` is `200` and reports `runner_mode` as
-   `external`.
+   `external`, preferably with the repeatable preflight check:
+
+   ```bash
+   SELFAD_METRICS_TOKEN='your-metrics-token' \
+     ./scripts/event-preflight.sh https://ctf.example
+   ```
 3. Push and check a known vulnerable service, an exploit and a one-line fix
    through the real participant path.
 4. Rebuild the runner VM from a known image and pre-pull required base images.
