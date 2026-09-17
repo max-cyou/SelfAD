@@ -41,10 +41,11 @@ socket. It requires a separate runner endpoint and its client TLS directory.
 Put the three runner client files in the directory named by
 `SELFAD_RUNNER_TLS_DIR`.
 
-Place the published HTTP ports behind a TLS reverse proxy. If the proxy forwards
-client addresses, set `SELFAD_TRUST_PROXY_HEADERS=true` and set
-`SELFAD_TRUSTED_PROXY_HOSTS` to that proxy's IP address (or addresses). Do not
-use `*`: forwarded headers are used for per-IP sign-in and registration limits.
+The compose profile includes Caddy for TLS on ports 80/443. SelfAD and Gitea
+HTTP ports are intentionally not published directly; Caddy is the sole trusted
+reverse proxy on a dedicated internal network. Point both public DNS records at
+this host before starting it, and allow inbound 80/443 plus the configured
+Gitea SSH port in the host firewall.
 
 Set `SELFAD_GITEA_PUBLIC_URL`, `SELFAD_GITEA_DOMAIN`,
 `SELFAD_GITEA_SSH_DOMAIN` and `SELFAD_GITEA_SSH_PUBLIC_PORT` to the values
