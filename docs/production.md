@@ -102,6 +102,9 @@ both applications own tables such as `users` and `services`.
 
 ## Runner host
 
+Use the [dedicated runner VM guide](runner-host.md) to create its mutual TLS
+credentials and Docker listener.
+
 Use a fresh VM dedicated to one tournament. Enable Docker's TLS listener only
 on a private interface. The runner needs outbound access only to the image and
 package mirrors you explicitly allow. Participant jobs are placed on Docker
