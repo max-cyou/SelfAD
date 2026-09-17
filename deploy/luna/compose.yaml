@@ -52,7 +52,11 @@ services:
     volumes:
       - selfad-data:/data
       - ${SELFAD_RUNNER_TLS_DIR:-/opt/selfad/runner-tls}:/run/selfad-runner-tls:ro
-    mem_limit: 1g
+    # Gitea serves each SSH Git operation in a short-lived process. A public
+    # push burst needs headroom beyond the steady-state web application.
+    mem_limit: 1400m
+    memswap_limit: 1400m
+    pids_limit: 512
     shm_size: 64m
     networks:
       proxy:

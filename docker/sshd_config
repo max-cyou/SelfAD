@@ -1,0 +1,4 @@
+# Public events cause legitimate bursts when participants push together.
+# Keep a per-source guard while avoiding OpenSSH's low default MaxStartups.
+LoginGraceTime 30
+PerSourceMaxStartups 50

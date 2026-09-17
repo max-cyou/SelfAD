@@ -10,6 +10,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SELFAD_GITEA_VERIFY_TLS=false \
     SELFAD_RUNNER_DOCKER_HOST=unix:///run/selfad-docker/docker.sock \
     SELFAD_ENABLE_INTERNAL_RUNNER=false \
+    SSH_MAX_STARTUPS=100:30:200 \
+    SSH_INCLUDE_FILE=/etc/ssh/selfad.conf \
     GITEA__server__DOMAIN=localhost \
     GITEA__server__HTTP_PORT=8929 \
     GITEA__server__ROOT_URL=http://localhost:8929/ \
@@ -54,12 +56,14 @@ COPY docker/entrypoint.sh /opt/selfad/entrypoint.sh
 COPY docker/selfad-run /etc/s6/selfad/run
 COPY docker/dockerd-run /etc/s6/dockerd/run
 COPY docker/healthcheck.sh /opt/selfad/healthcheck.sh
+COPY docker/sshd_config /etc/ssh/selfad.conf
 
 RUN chmod 0755 \
         /opt/selfad/entrypoint.sh \
         /opt/selfad/healthcheck.sh \
         /etc/s6/selfad/run \
         /etc/s6/dockerd/run \
+    && chmod 0644 /etc/ssh/selfad.conf \
     && chown -R root:root /app /opt/selfad /etc/s6/selfad
 
 EXPOSE 8000 8929 22

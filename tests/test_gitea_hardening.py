@@ -19,6 +19,24 @@ class GiteaHardeningTests(unittest.TestCase):
         ):
             self.assertIn(setting, dockerfile)
 
+    def test_ssh_transport_accepts_public_event_bursts(self):
+        config = (PROJECT_DIR / "docker" / "sshd_config").read_text(
+            encoding="utf-8"
+        )
+        dockerfile = (PROJECT_DIR / "Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("SSH_MAX_STARTUPS=100:30:200", dockerfile)
+        self.assertIn("SSH_INCLUDE_FILE=/etc/ssh/selfad.conf", dockerfile)
+        self.assertIn("LoginGraceTime 30", config)
+        self.assertIn("PerSourceMaxStartups 50", config)
+
+    def test_luna_control_plane_has_headroom_for_ssh_git_bursts(self):
+        compose = (PROJECT_DIR / "deploy" / "luna" / "compose.yaml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("mem_limit: 1400m", compose)
+        self.assertIn("memswap_limit: 1400m", compose)
+        self.assertIn("pids_limit: 512", compose)
+
 
 if __name__ == "__main__":
     unittest.main()
