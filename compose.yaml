@@ -1,0 +1,51 @@
+name: selfad
+
+services:
+  runner:
+    image: docker:29-dind
+    hostname: runner
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+    volumes:
+      - runner-certs:/certs
+    healthcheck:
+      test: ["CMD-SHELL", "docker info >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 4s
+      retries: 24
+    mem_limit: 768m
+    pids_limit: 256
+
+  selfad:
+    build: .
+    image: selfad:local
+    restart: unless-stopped
+    depends_on:
+      runner:
+        condition: service_healthy
+    ports:
+      - "${SELFAD_HTTP_PORT:-8000}:8000"
+      - "${SELFAD_GITEA_HTTP_PORT:-8929}:8929"
+      - "${SELFAD_GITEA_SSH_PORT:-2224}:22"
+    environment:
+      SELFAD_ENABLE_INTERNAL_RUNNER: "false"
+      SELFAD_RUNNER_DOCKER_HOST: tcp://runner:2376
+      SELFAD_RUNNER_TLS_VERIFY: "true"
+      SELFAD_RUNNER_CERT_PATH: /run/selfad-runner-tls/client
+      SELFAD_GITEA_PUBLIC_URL: ${SELFAD_GITEA_PUBLIC_URL:-http://localhost:8929}
+      GITEA__server__DOMAIN: ${SELFAD_GITEA_DOMAIN:-localhost}
+      GITEA__server__ROOT_URL: ${SELFAD_GITEA_PUBLIC_URL:-http://localhost:8929}/
+      GITEA__server__SSH_DOMAIN: ${SELFAD_GITEA_SSH_DOMAIN:-localhost}
+      GITEA__server__SSH_PORT: ${SELFAD_GITEA_SSH_PORT:-2224}
+      GITEA__server__HTTP_PORT: "8929"
+    volumes:
+      - selfad-data:/data
+      - runner-certs:/run/selfad-runner-tls:ro
+    mem_limit: 1g
+    shm_size: 64m
+
+volumes:
+  selfad-data:
+  runner-certs:

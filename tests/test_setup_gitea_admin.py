@@ -7,7 +7,7 @@ from selfad.routes.setup import submit_setup
 
 
 class SetupGiteaAdminTests(unittest.TestCase):
-    def test_setup_binds_panel_admin_to_gitea_root(self):
+    def test_setup_creates_matching_gitea_administrator(self):
         request = MagicMock()
         session = MagicMock()
         session.get.return_value = None
@@ -16,12 +16,11 @@ class SetupGiteaAdminTests(unittest.TestCase):
         with (
             patch("selfad.routes.setup.csrf_token_is_valid", return_value=True),
             patch("selfad.routes.setup.get_gitea_settings", return_value=settings),
-            patch("selfad.routes.setup.update_gitea_user") as update_user,
+            patch("selfad.routes.setup.create_gitea_user") as create_user,
             patch(
                 "selfad.routes.setup.authenticate_gitea_user",
-                return_value=GiteaUser(1, "root"),
+                return_value=GiteaUser(1, "organizer"),
             ) as authenticate,
-            patch("selfad.routes.setup.set_gitea_root_password") as save_password,
             patch("selfad.routes.setup.hash_password", return_value="password-hash"),
         ):
             response = submit_setup(
@@ -38,25 +37,24 @@ class SetupGiteaAdminTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 303)
-        update_user.assert_called_once_with(
+        create_user.assert_called_once_with(
             settings,
-            username="root",
+            username="organizer",
             email="admin@example.test",
             password="correct-password",
         )
         authenticate.assert_called_once_with(
             settings,
-            username="root",
+            username="organizer",
             password="correct-password",
         )
-        save_password.assert_called_once_with("correct-password")
 
         added_objects = session.add_all.call_args.args[0]
         admin = next(item for item in added_objects if isinstance(item, User))
         self.assertEqual(admin.username, "organizer")
         self.assertTrue(admin.is_admin)
         self.assertEqual(admin.gitea_user_id, 1)
-        self.assertEqual(admin.gitea_username, "root")
+        self.assertEqual(admin.gitea_username, "organizer")
         session.commit.assert_called_once_with()
 
 

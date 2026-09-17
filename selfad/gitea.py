@@ -675,12 +675,17 @@ def ensure_repository_webhook(
     return hook_id
 
 
-def ensure_ssh_key(settings: GiteaSettings, public_key: str) -> int:
+def ensure_ssh_key(
+    settings: GiteaSettings,
+    public_key: str,
+    *,
+    username: str = GITEA_REPOSITORY_OWNER,
+) -> int:
     try:
         keys = _request(
             settings,
             "GET",
-            f"/users/{GITEA_REPOSITORY_OWNER}/keys?limit=100",
+            f"/users/{quote(username, safe='')}/keys?limit=100",
         )
     except _GiteaRequestError as error:
         if error.status_code in {401, 403}:
@@ -703,7 +708,7 @@ def ensure_ssh_key(settings: GiteaSettings, public_key: str) -> int:
         response = _request(
             settings,
             "POST",
-            f"/admin/users/{GITEA_REPOSITORY_OWNER}/keys",
+            f"/admin/users/{quote(username, safe='')}/keys",
             {
                 "title": "SelfAD administrator",
                 "key": public_key,
@@ -731,9 +736,14 @@ def provision_service(
     description: str,
     default_branch: str,
     ssh_public_key: str,
+    organizer_username: str,
     webhook_secret: str,
 ) -> ProvisionedService:
-    ssh_key_id = ensure_ssh_key(settings, ssh_public_key)
+    ssh_key_id = ensure_ssh_key(
+        settings,
+        ssh_public_key,
+        username=organizer_username,
+    )
     service_repository = create_repository(
         settings,
         path=slug,
@@ -756,6 +766,17 @@ def provision_service(
             description=f"Private SelfAD jury files for {name}.",
             default_branch=default_branch,
         )
+        if organizer_username != GITEA_REPOSITORY_OWNER:
+            for repository_path in (
+                service_repository.path,
+                jury_repository.path,
+            ):
+                add_repository_collaborator(
+                    settings,
+                    repository_path,
+                    username=organizer_username,
+                    permission="write",
+                )
         create_repository_file(
             settings,
             jury_repository.path,

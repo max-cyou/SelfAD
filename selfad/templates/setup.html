@@ -88,7 +88,7 @@
                 spellcheck="false"
                 required
               >
-              {% if errors.get('admin_username') %}<small>{{ errors.get('admin_username') }}</small>{% endif %}
+              <small>{{ errors.get('admin_username') or 'Used for both SelfAD and Gitea.' }}</small>
             </div>
 
             <div class="field{% if errors.get('admin_email') %} field--error{% endif %}">

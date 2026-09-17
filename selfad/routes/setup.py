@@ -11,11 +11,12 @@ from selfad.gitea import (
     GiteaConflict,
     GiteaUnavailable,
     authenticate_gitea_user,
-    update_gitea_user,
+    create_gitea_user,
+    delete_gitea_user,
 )
 from selfad.models import BrandingSettings, InstanceConfig, User
 from selfad.security import hash_password
-from selfad.settings import get_gitea_settings, set_gitea_root_password
+from selfad.settings import get_gitea_settings
 from selfad.web import templates
 
 
@@ -71,6 +72,8 @@ def validate_setup(
         errors["admin_username"] = (
             "Use letters, numbers, dots, dashes or underscores."
         )
+    elif admin_username.lower() == "root":
+        errors["admin_username"] = "This username is reserved by the internal Gitea account."
 
     if len(admin_email) > 320 or not EMAIL_PATTERN.fullmatch(admin_email):
         errors["admin_email"] = "Enter a valid email address."
@@ -153,20 +156,19 @@ def submit_setup(
 
     try:
         gitea_settings = get_gitea_settings()
-        update_gitea_user(
+        create_gitea_user(
             gitea_settings,
-            username="root",
+            username=admin_username,
             email=admin_email,
             password=admin_password,
         )
         gitea_admin = authenticate_gitea_user(
             gitea_settings,
-            username="root",
+            username=admin_username,
             password=admin_password,
         )
         if gitea_admin is None:
             raise GiteaUnavailable("Gitea rejected the administrator password.")
-        set_gitea_root_password(admin_password)
     except (GiteaConflict, GiteaUnavailable, OSError) as error:
         return render_setup(
             request,
@@ -210,6 +212,13 @@ def submit_setup(
         session.commit()
     except IntegrityError:
         session.rollback()
+        try:
+            delete_gitea_user(
+                gitea_settings,
+                username=gitea_admin.username,
+            )
+        except GiteaUnavailable:
+            pass
         return render_setup(
             request,
             site_name=site_name,

@@ -654,6 +654,7 @@ async def create_service(
             description=values["description"],
             default_branch=values["default_branch"],
             ssh_public_key=ssh_public_key,
+            organizer_username=user.gitea_username or "root",
             webhook_secret=get_gitea_webhook_secret(),
         )
     except (GiteaConflict, GiteaUnavailable) as error:
