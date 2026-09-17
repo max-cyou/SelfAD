@@ -1,9 +1,9 @@
 (() => {
-  const startInput = document.querySelector("#contest-starts-at");
+  const scheduleInputs = Array.from(document.querySelectorAll("[data-utc-value]"));
   const timezoneInput = document.querySelector("#browser-timezone");
-  const timezoneLabel = document.querySelector("[data-browser-timezone]");
+  const timezoneLabels = Array.from(document.querySelectorAll("[data-browser-timezone]"));
 
-  if (startInput && timezoneInput && timezoneLabel) {
+  if (scheduleInputs.length && timezoneInput && timezoneLabels.length) {
     let browserTimezone = "UTC";
     let timezoneDetected = false;
     try {
@@ -17,22 +17,24 @@
     }
 
     timezoneInput.value = browserTimezone;
-    timezoneLabel.textContent = browserTimezone;
+    timezoneLabels.forEach((label) => {
+      label.textContent = browserTimezone;
+    });
 
-    const storedUtc = startInput.dataset.utcValue;
-    if (storedUtc && !startInput.value) {
+    scheduleInputs.forEach((input) => {
+      const storedUtc = input.dataset.utcValue;
+      if (!storedUtc || input.value) return;
       const storedDate = new Date(storedUtc);
-      if (!Number.isNaN(storedDate.getTime())) {
-        const read = (localMethod, utcMethod) =>
-          storedDate[timezoneDetected ? localMethod : utcMethod]();
-        const pad = (value) => String(value).padStart(2, "0");
-        startInput.value = [
-          read("getFullYear", "getUTCFullYear"),
-          pad(read("getMonth", "getUTCMonth") + 1),
-          pad(read("getDate", "getUTCDate")),
-        ].join("-") + `T${pad(read("getHours", "getUTCHours"))}:${pad(read("getMinutes", "getUTCMinutes"))}`;
-      }
-    }
+      if (Number.isNaN(storedDate.getTime())) return;
+      const read = (localMethod, utcMethod) =>
+        storedDate[timezoneDetected ? localMethod : utcMethod]();
+      const pad = (value) => String(value).padStart(2, "0");
+      input.value = [
+        read("getFullYear", "getUTCFullYear"),
+        pad(read("getMonth", "getUTCMonth") + 1),
+        pad(read("getDate", "getUTCDate")),
+      ].join("-") + `T${pad(read("getHours", "getUTCHours"))}:${pad(read("getMinutes", "getUTCMinutes"))}`;
+    });
   }
 
   const scoringSettings = document.querySelector("[data-scoring-settings]");
@@ -48,6 +50,8 @@
     const defensePenalty = scoringSettings.querySelector("[data-defense-penalty]");
     const attackFree = scoringSettings.querySelector("[data-attack-free]");
     const defenseFree = scoringSettings.querySelector("[data-defense-free]");
+    const stdoutNoiseMode = scoringSettings.querySelector("[data-stdout-noise-mode]");
+    const stdoutNoisePenaltyField = scoringSettings.querySelector("[data-stdout-noise-penalty-field]");
     const preview = scoringSettings.querySelector("[data-scoring-preview]");
 
     const numericValue = (control) => {
@@ -72,6 +76,9 @@
     const updateScoringPreview = () => {
       attackPerFlag.hidden = attackMode.value !== "per_flag";
       defensePerFlag.hidden = defenseMode.value !== "per_flag";
+      if (stdoutNoiseMode && stdoutNoisePenaltyField) {
+        stdoutNoisePenaltyField.hidden = stdoutNoiseMode.value !== "percent_penalty";
+      }
       const percentageMode = ["percent", "compound_percent"].includes(penaltyMode.value);
       attackPenalty.max = percentageMode ? "100" : "1000000";
       defensePenalty.max = percentageMode ? "100" : "1000000";

@@ -21,6 +21,7 @@ readonly gitea_url="${SELFAD_GITEA_INTERNAL_URL}"
 readonly token_file="${SELFAD_GITEA_TOKEN_FILE}"
 readonly config_file="/data/gitea/conf/app.ini"
 readonly password_file="/data/selfad/secrets/gitea_admin_password"
+readonly service_username="selfad-system"
 
 cd /app
 
@@ -36,12 +37,15 @@ done
 token_is_valid=false
 if [[ -s "${token_file}" ]]; then
     current_token=$(<"${token_file}")
-    if curl \
+    authenticated_user=$(curl \
         --fail \
         --silent \
         --header "Authorization: token ${current_token}" \
         "${gitea_url}/api/v1/user" \
-        >/dev/null; then
+        2>/dev/null \
+        | python3 -c 'import json, sys; print(json.load(sys.stdin).get("login", ""))' \
+        2>/dev/null || true)
+    if [[ "${authenticated_user}" == "${service_username}" ]]; then
         token_is_valid=true
     fi
 fi
@@ -63,10 +67,27 @@ if [[ "${token_is_valid}" != true ]]; then
         unset admin_password
     fi
 
+    if ! su-exec git:git /usr/local/bin/gitea \
+        --config "${config_file}" \
+        admin user list \
+        | awk -v username="${service_username}" \
+            '$2 == username { found = 1 } END { exit !found }'; then
+        service_password=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
+        su-exec git:git /usr/local/bin/gitea \
+            --config "${config_file}" \
+            admin user create \
+            --username "${service_username}" \
+            --password "${service_password}" \
+            --email "selfad-system@localhost" \
+            --admin \
+            --must-change-password=false
+        unset service_password
+    fi
+
     current_token=$(su-exec git:git /usr/local/bin/gitea \
         --config "${config_file}" \
         admin user generate-access-token \
-        --username root \
+        --username "${service_username}" \
         --token-name "selfad-internal-$(date +%s)" \
         --scopes all \
         --raw)

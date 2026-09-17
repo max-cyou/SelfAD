@@ -147,14 +147,34 @@ def get_gitea_settings() -> GiteaSettings:
 
 
 def get_gitea_root_password() -> str | None:
-    password_file = os.getenv(
-        "SELFAD_GITEA_PASSWORD_FILE",
-        "/data/selfad/secrets/gitea_admin_password",
-    )
+    password_file = _gitea_root_password_path()
     try:
-        return Path(password_file).read_text(encoding="utf-8").strip() or None
+        return password_file.read_text(encoding="utf-8").strip() or None
     except (FileNotFoundError, PermissionError):
         return None
+
+
+def set_gitea_root_password(password: str) -> None:
+    password_file = _gitea_root_password_path()
+    temporary_file = password_file.with_name(f"{password_file.name}.new")
+    descriptor = os.open(
+        temporary_file,
+        os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+        0o600,
+    )
+    with os.fdopen(descriptor, "w", encoding="utf-8") as target:
+        target.write(password)
+        target.flush()
+        os.fsync(target.fileno())
+    os.replace(temporary_file, password_file)
+    os.chmod(password_file, 0o640)
+
+
+def _gitea_root_password_path() -> Path:
+    return Path(os.getenv(
+        "SELFAD_GITEA_PASSWORD_FILE",
+        "/data/selfad/secrets/gitea_admin_password",
+    ))
 
 
 def get_runner_settings() -> RunnerSettings:

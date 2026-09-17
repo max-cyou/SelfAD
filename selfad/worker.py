@@ -526,17 +526,29 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
             injected_flags=injected_flags,
             functionality_passed=functionality_passed,
             completed=completed,
+            stdout_noise=bool(is_attack and runtime and runtime.stdout_noise),
             message=result_message,
         )
         scoring_message = score_message(decision)
         if is_attack:
+            noisy_stdout_rejected = bool(
+                runtime is not None
+                and runtime.stdout_noise
+                and scoring.stdout_noise_mode == "unsuccessful"
+            )
             if runtime is None:
                 player.attack_status = ParticipantRepositoryStatus.FAILED
                 player.attack_message = f"{error_message} {scoring_message}"
+            elif noisy_stdout_rejected:
+                player.attack_status = ParticipantRepositoryStatus.FAILED
+                player.attack_message = (
+                    "Attack stdout contains non-flag output. "
+                    f"{scoring_message}"
+                )
             else:
                 player.attack_status = ParticipantRepositoryStatus.PASSED if runtime.passed else ParticipantRepositoryStatus.FAILED
                 player.attack_message = f"{runtime.message} {scoring_message}"
-                if runtime.matched_flags:
+                if runtime.matched_flags and not noisy_stdout_rejected:
                     player.defense_unlocked = True
                     player.defense_message = "Defense repository unlocked."
             player.attack_score = max(

@@ -11,6 +11,9 @@ from selfad.repository_readmes import jury_readme, organizer_readme
 from selfad.settings import GiteaSettings
 
 
+GITEA_REPOSITORY_OWNER = "root"
+
+
 class GiteaError(Exception):
     pass
 
@@ -308,7 +311,12 @@ def create_repository(
         "default_branch": default_branch,
     }
     try:
-        response = _request(settings, "POST", "/user/repos", payload)
+        response = _request(
+            settings,
+            "POST",
+            f"/admin/users/{GITEA_REPOSITORY_OWNER}/repos",
+            payload,
+        )
     except _GiteaRequestError as error:
         if error.status_code in {409, 422}:
             raise GiteaConflict("A Gitea repository with this path already exists.") from error
@@ -669,7 +677,11 @@ def ensure_repository_webhook(
 
 def ensure_ssh_key(settings: GiteaSettings, public_key: str) -> int:
     try:
-        keys = _request(settings, "GET", "/user/keys?limit=100")
+        keys = _request(
+            settings,
+            "GET",
+            f"/users/{GITEA_REPOSITORY_OWNER}/keys?limit=100",
+        )
     except _GiteaRequestError as error:
         if error.status_code in {401, 403}:
             raise GiteaUnavailable("Gitea rejected the configured token.") from error
@@ -691,8 +703,12 @@ def ensure_ssh_key(settings: GiteaSettings, public_key: str) -> int:
         response = _request(
             settings,
             "POST",
-            "/user/keys",
-            {"title": "SelfAD administrator", "key": public_key},
+            f"/admin/users/{GITEA_REPOSITORY_OWNER}/keys",
+            {
+                "title": "SelfAD administrator",
+                "key": public_key,
+                "read_only": False,
+            },
         )
     except _GiteaRequestError as error:
         if error.status_code in {409, 422}:

@@ -43,6 +43,7 @@ def initialize_database() -> None:
 
     Base.metadata.create_all(bind=engine)
     _migrate_existing_sqlite_schema()
+    _migrate_existing_postgresql_schema()
     with SessionLocal() as session:
         if session.get(_models.ScoringSettings, 1) is None:
             session.add(_models.ScoringSettings(id=1))
@@ -101,6 +102,13 @@ def _migrate_existing_sqlite_schema() -> None:
                 text(
                     "ALTER TABLE instance_config ADD COLUMN "
                     "contest_starts_at DATETIME"
+                )
+            )
+        if "contest_ends_at" not in instance_config_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE instance_config ADD COLUMN "
+                    "contest_ends_at DATETIME"
                 )
             )
 
@@ -353,6 +361,44 @@ def _migrate_existing_sqlite_schema() -> None:
                     "BOOLEAN NOT NULL DEFAULT 0"
                 )
             )
+        if "penalize_stdout_noise" not in scoring_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE scoring_settings "
+                    "ADD COLUMN penalize_stdout_noise BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+        if "stdout_noise_mode" not in scoring_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE scoring_settings "
+                    "ADD COLUMN stdout_noise_mode VARCHAR(24) NOT NULL DEFAULT 'ignore'"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE scoring_settings SET stdout_noise_mode = 'unsuccessful' "
+                    "WHERE penalize_stdout_noise = 1"
+                )
+            )
+        if "stdout_noise_penalty_percent" not in scoring_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE scoring_settings "
+                    "ADD COLUMN stdout_noise_penalty_percent FLOAT NOT NULL DEFAULT 1.0"
+                )
+            )
+
+        submission_attempt_columns = {
+            column["name"] for column in schema.get_columns("submission_attempts")
+        }
+        if "stdout_noise" not in submission_attempt_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE submission_attempts "
+                    "ADD COLUMN stdout_noise BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
 
         if "services.repository_id" in added_columns:
             connection.execute(
@@ -410,3 +456,45 @@ def _migrate_existing_sqlite_schema() -> None:
             )
 
         connection.execute(text("PRAGMA optimize"))
+
+
+def _migrate_existing_postgresql_schema() -> None:
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE instance_config ADD COLUMN IF NOT EXISTS "
+                "contest_ends_at TIMESTAMP WITH TIME ZONE"
+            )
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE scoring_settings ADD COLUMN IF NOT EXISTS "
+                "penalize_stdout_noise BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE scoring_settings ADD COLUMN IF NOT EXISTS "
+                "stdout_noise_mode VARCHAR(24) NOT NULL DEFAULT 'ignore'"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE scoring_settings SET stdout_noise_mode = 'unsuccessful' "
+                "WHERE penalize_stdout_noise = TRUE AND stdout_noise_mode = 'ignore'"
+            )
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE scoring_settings ADD COLUMN IF NOT EXISTS "
+                "stdout_noise_penalty_percent DOUBLE PRECISION NOT NULL DEFAULT 1.0"
+            )
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE submission_attempts ADD COLUMN IF NOT EXISTS "
+                "stdout_noise BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )

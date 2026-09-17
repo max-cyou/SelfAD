@@ -78,7 +78,7 @@ The same URL is available in `SELFAD_TARGET`:
 import os
 import sys
 
-target = os.environ.get("SELFAD_TARGET", sys.argv[1]).rstrip("/")
+target = (os.environ.get("SELFAD_TARGET") or sys.argv[1]).rstrip("/")
 ```
 
 The runtime is Python 3.13 on Alpine. The standard library is always available, and local Python modules committed to this repository may be imported.
@@ -108,7 +108,7 @@ import string
 import sys
 import urllib.request
 
-target = os.environ.get("SELFAD_TARGET", sys.argv[1]).rstrip("/")
+target = (os.environ.get("SELFAD_TARGET") or sys.argv[1]).rstrip("/")
 alphabet = string.ascii_uppercase + string.digits
 flag = "".join(secrets.choice(alphabet) for _ in range(32))
 
@@ -137,7 +137,7 @@ import os
 import sys
 import urllib.request
 
-target = os.environ.get("SELFAD_TARGET", sys.argv[1]).rstrip("/")
+target = (os.environ.get("SELFAD_TARGET") or sys.argv[1]).rstrip("/")
 
 # Replace this with the real exploit and print only recovered flags.
 with urllib.request.urlopen(f"{{target}}/vulnerable-endpoint", timeout=5) as response:
@@ -161,7 +161,7 @@ import os
 import sys
 import urllib.request
 
-target = os.environ.get("SELFAD_TARGET", sys.argv[1]).rstrip("/")
+target = (os.environ.get("SELFAD_TARGET") or sys.argv[1]).rstrip("/")
 
 try:
     request = urllib.request.Request(
@@ -224,7 +224,7 @@ The target is also available as `SELFAD_TARGET`:
 import os
 import sys
 
-target = os.environ.get("SELFAD_TARGET", sys.argv[1]).rstrip("/")
+target = (os.environ.get("SELFAD_TARGET") or sys.argv[1]).rstrip("/")
 ```
 
 Only the service is reachable at runtime. The organizer may provide fixed Python packages in the attack runtime. If the organizer explicitly enables it, you may also add a UTF-8 `requirements.txt` (up to 64 KB) to this repository; its packages are installed in addition to the fixed list. Participant requirements accept only pinned PyPI package lines such as `requests==2.32.5` (including optional extras); URLs, git dependencies, pip options and version ranges are rejected. Otherwise a non-empty participant `requirements.txt` is rejected. The runner allows 128 MB RAM, 0.5 CPU, 64 processes, a read-only filesystem, a 16 MB `/tmp`, 45 seconds, and 128 KB of combined stdout/stderr.
@@ -237,7 +237,7 @@ Print every recovered flag on its own line. A valid flag is exactly 32 character
 print("A1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6")
 ```
 
-Only flags that were printed by the jury injector in the same run count. Duplicates count once. Other log lines are ignored unless they independently look exactly like a flag.
+Only flags that were printed by the jury injector in the same run count. Duplicates count once. The organizer may ignore non-flag stdout, treat it as an unsuccessful submission, or apply an additional percentage cost; send diagnostics to stderr and keep stdout flag-only.
 
 The organizer chooses either percentage coverage or points per matched flag. Your best awarded attack score is retained, and at least one match unlocks the defense repository. A submission that does not improve your raw result can add penalty debt to the next improvement. Exit code must be `0`; an exception, timeout, or non-zero exit gives no result for that run and may be penalized.
 

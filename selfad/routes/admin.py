@@ -53,7 +53,12 @@ from selfad.models import (
 )
 from selfad.participants import provision_participant_service
 from selfad.runner import runner_is_available, runner_mode
-from selfad.scoring import PENALTY_MODES, REWARD_MODES, get_scoring_settings
+from selfad.scoring import (
+    PENALTY_MODES,
+    REWARD_MODES,
+    STDOUT_NOISE_MODES,
+    get_scoring_settings,
+)
 from selfad.security import hash_password
 from selfad.service_contract import (
     ServiceContractResult,
@@ -63,6 +68,7 @@ from selfad.settings import (
     get_gitea_root_password,
     get_gitea_settings,
     get_gitea_webhook_secret,
+    set_gitea_root_password,
 )
 from selfad.web import templates
 
@@ -110,6 +116,9 @@ def parse_scoring_form(form) -> tuple[dict[str, object], dict[str, str]]:
         ).strip(),
         "penalty_mode": str(form.get("penalty_mode", "percent")).strip(),
         "penalize_check_errors": form.get("penalize_check_errors") == "on",
+        "stdout_noise_mode": str(
+            form.get("stdout_noise_mode", "ignore")
+        ).strip(),
         "attack_requirements": str(form.get("attack_requirements", "")),
         "allow_user_attack_requirements": (
             form.get("allow_user_attack_requirements") == "on"
@@ -122,6 +131,8 @@ def parse_scoring_form(form) -> tuple[dict[str, object], dict[str, str]]:
         errors["defense_reward_mode"] = "Choose a valid reward mode."
     if values["penalty_mode"] not in PENALTY_MODES:
         errors["penalty_mode"] = "Choose a valid penalty mode."
+    if values["stdout_noise_mode"] not in STDOUT_NOISE_MODES:
+        errors["stdout_noise_mode"] = "Choose a valid stdout rule."
 
     for name, (minimum, maximum) in SCORING_INTEGER_FIELDS.items():
         raw_value = str(form.get(name, "")).strip()
@@ -151,6 +162,18 @@ def parse_scoring_form(form) -> tuple[dict[str, object], dict[str, str]]:
             errors[name] = f"Use a number from 0 to {penalty_maximum}."
         else:
             values[name] = parsed
+    raw_stdout_noise_penalty = str(
+        form.get("stdout_noise_penalty_percent", "")
+    ).strip()
+    values["stdout_noise_penalty_percent"] = raw_stdout_noise_penalty
+    try:
+        stdout_noise_penalty = float(raw_stdout_noise_penalty)
+        if not 0 <= stdout_noise_penalty <= 100:
+            raise ValueError
+    except ValueError:
+        errors["stdout_noise_penalty_percent"] = "Use a percentage from 0 to 100."
+    else:
+        values["stdout_noise_penalty_percent"] = stdout_noise_penalty
     requirements = str(values["attack_requirements"])
     if "\x00" in requirements:
         errors["attack_requirements"] = "Requirements must not contain null bytes."
@@ -238,15 +261,23 @@ def render_admin(
     branding = get_branding_context(session)
     scoring = get_scoring_settings(session)
     scheduled_start = config.contest_starts_at if config else None
+    scheduled_end = config.contest_ends_at if config else None
     scheduled_start_utc = (
         as_utc(scheduled_start).isoformat().replace("+00:00", "Z")
         if scheduled_start
+        else ""
+    )
+    scheduled_end_utc = (
+        as_utc(scheduled_end).isoformat().replace("+00:00", "Z")
+        if scheduled_end
         else ""
     )
     general_values: dict[str, object] = {
         "contest_state": contest_state(config),
         "contest_starts_at_local": "",
         "contest_starts_at_utc": scheduled_start_utc,
+        "contest_ends_at_local": "",
+        "contest_ends_at_utc": scheduled_end_utc,
         "registration_enabled": branding["registration_enabled"],
         "registration_invite_only": branding["registration_invite_only"],
         "attack_reward_mode": scoring.attack_reward_mode,
@@ -261,6 +292,8 @@ def render_admin(
         "attack_free_failures": scoring.attack_free_failures,
         "defense_free_failures": scoring.defense_free_failures,
         "penalize_check_errors": scoring.penalize_check_errors,
+        "stdout_noise_mode": scoring.stdout_noise_mode,
+        "stdout_noise_penalty_percent": scoring.stdout_noise_penalty_percent,
         "attack_requirements": scoring.attack_requirements,
         "allow_user_attack_requirements": (
             scoring.allow_user_attack_requirements
@@ -281,7 +314,7 @@ def render_admin(
         appearance_values.update(form_values)
 
     services = session.scalars(
-        select(Service).order_by(Service.name, Service.id)
+        select(Service).order_by(Service.id)
     ).all()
     users_search = _requested_users_search(request)
     users_query = select(User)
@@ -1035,7 +1068,7 @@ async def update_user(
         )
 
     settings = get_gitea_settings()
-    if target.gitea_username and target.gitea_username != "root":
+    if target.gitea_username:
         try:
             await run_in_threadpool(
                 update_gitea_user,
@@ -1044,7 +1077,9 @@ async def update_user(
                 email=values["email"],
                 password=password or None,
             )
-        except (GiteaConflict, GiteaUnavailable) as error:
+            if target.gitea_username == "root" and password:
+                await run_in_threadpool(set_gitea_root_password, password)
+        except (GiteaConflict, GiteaUnavailable, OSError) as error:
             return render_admin(
                 request,
                 session,
@@ -1251,6 +1286,43 @@ async def update_appearance(
     return RedirectResponse(url="/admin?saved=true#appearance", status_code=303)
 
 
+@router.post("/admin/appearance/reset", response_class=HTMLResponse)
+async def reset_appearance(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    user, redirect = get_admin_access(request, session)
+    if redirect:
+        return redirect
+    form = await request.form()
+    if not csrf_token_is_valid(request, form.get("csrf_token")):
+        return HTMLResponse("Invalid CSRF token.", status_code=403)
+
+    config = session.get(InstanceConfig, 1)
+    branding = session.get(BrandingSettings, 1)
+    if config is None or branding is None:
+        return RedirectResponse(url="/setup", status_code=303)
+    palette = session.get(PaletteSettings, 1)
+    if palette is None:
+        palette = PaletteSettings(
+            id=1,
+            **{name: field.default for name, field in PALETTE_FIELDS.items()},
+        )
+    else:
+        for name, field in PALETTE_FIELDS.items():
+            setattr(palette, name, field.default)
+
+    config.site_name = "SelfAD"
+    branding.change_title = False
+    branding.remove_standard_logo = False
+    branding.homepage_html = ""
+    branding.started_homepage_html = ""
+    branding.ended_homepage_html = ""
+    session.add(palette)
+    session.commit()
+    return RedirectResponse(url="/admin?saved=true#appearance", status_code=303)
+
+
 @router.post("/admin/registration", response_class=HTMLResponse)
 async def update_registration(
     request: Request,
@@ -1276,9 +1348,11 @@ async def update_registration(
     contest_starts_at_local = str(
         form.get("contest_starts_at_local", "")
     ).strip()
+    contest_ends_at_local = str(form.get("contest_ends_at_local", "")).strip()
     browser_timezone = str(form.get("browser_timezone", "UTC")).strip()
     scoring_values, scoring_errors = parse_scoring_form(form)
     contest_starts_at: datetime | None = None
+    contest_ends_at: datetime | None = None
     errors: dict[str, str] = {}
     errors.update(scoring_errors)
     if requested_contest_state not in CONTEST_STATES:
@@ -1297,6 +1371,22 @@ async def update_registration(
             ).astimezone(timezone.utc)
         except ValueError:
             errors["contest_starts_at_local"] = "Use a valid date and time."
+    if contest_ends_at_local:
+        try:
+            local_end = datetime.fromisoformat(contest_ends_at_local)
+            if local_end.tzinfo is not None:
+                raise ValueError
+            try:
+                end_timezone = ZoneInfo(browser_timezone)
+            except (ZoneInfoNotFoundError, ValueError):
+                end_timezone = timezone.utc
+            contest_ends_at = local_end.replace(
+                tzinfo=end_timezone
+            ).astimezone(timezone.utc)
+        except ValueError:
+            errors["contest_ends_at_local"] = "Use a valid date and time."
+    if contest_starts_at and contest_ends_at and contest_ends_at <= contest_starts_at:
+        errors["contest_ends_at_local"] = "Automatic stop must be after automatic start."
     if invite_code and not 4 <= len(invite_code) <= 128:
         errors["registration_invite_code"] = "Use between 4 and 128 characters."
     if invite_only and not invite_code and not config.registration_invite_code_hash:
@@ -1311,6 +1401,8 @@ async def update_registration(
                 "contest_state": requested_contest_state,
                 "contest_starts_at_local": contest_starts_at_local,
                 "contest_starts_at_utc": "",
+                "contest_ends_at_local": contest_ends_at_local,
+                "contest_ends_at_utc": "",
                 "registration_enabled": registration_enabled,
                 "registration_invite_only": invite_only,
                 **scoring_values,
@@ -1322,6 +1414,7 @@ async def update_registration(
     config.contest_started = requested_contest_state in {STARTED, ENDED}
     config.contest_ended = requested_contest_state == ENDED
     config.contest_starts_at = contest_starts_at
+    config.contest_ends_at = contest_ends_at
     config.registration_enabled = registration_enabled
     config.registration_invite_only = invite_only
     scoring = get_scoring_settings(session)
@@ -1350,6 +1443,15 @@ async def update_registration(
     )
     scoring.penalize_check_errors = bool(
         scoring_values["penalize_check_errors"]
+    )
+    scoring.stdout_noise_mode = str(scoring_values["stdout_noise_mode"])
+    scoring.stdout_noise_penalty_percent = float(
+        scoring_values["stdout_noise_penalty_percent"]
+    )
+    # The legacy field is retained only so old application versions can read
+    # the database safely; the mode above is authoritative.
+    scoring.penalize_stdout_noise = (
+        scoring.stdout_noise_mode == "unsuccessful"
     )
     scoring.attack_requirements = str(scoring_values["attack_requirements"])
     scoring.allow_user_attack_requirements = bool(

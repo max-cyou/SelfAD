@@ -119,6 +119,9 @@
                   {% if general_errors.get('contest_starts_at_local') %}
                     <p class="general-settings-error" role="alert">{{ general_errors.contest_starts_at_local }}</p>
                   {% endif %}
+                  {% if general_errors.get('contest_ends_at_local') %}
+                    <p class="general-settings-error" role="alert">{{ general_errors.contest_ends_at_local }}</p>
+                  {% endif %}
                   {% if general_errors.get('contest_state') %}
                     <p class="general-settings-error" role="alert">{{ general_errors.contest_state }}</p>
                   {% endif %}
@@ -142,6 +145,21 @@
                         data-utc-value="{{ general_form.contest_starts_at_utc }}"
                       >
                       <input id="browser-timezone" name="browser_timezone" type="hidden" value="UTC">
+                      <small class="contest-timezone" title="UTC is used if timezone detection fails">
+                        <span data-browser-timezone>UTC</span>
+                      </small>
+                      </div>
+                    </div>
+                    <div class="contest-setting contest-setting--scheduled">
+                      <label for="contest-ends-at">Automatic stop</label>
+                      <div class="schedule-control">
+                      <input
+                        id="contest-ends-at"
+                        name="contest_ends_at_local"
+                        type="datetime-local"
+                        value="{{ general_form.contest_ends_at_local }}"
+                        data-utc-value="{{ general_form.contest_ends_at_utc }}"
+                      >
                       <small class="contest-timezone" title="UTC is used if timezone detection fails">
                         <span data-browser-timezone>UTC</span>
                       </small>
@@ -244,6 +262,20 @@
                         <label class="scoring-check">
                           <input name="penalize_check_errors" type="checkbox"{% if general_form.penalize_check_errors %} checked{% endif %}>
                           <span>Count contract, build, healthcheck and runtime errors as unsuccessful submissions</span>
+                        </label>
+                        <label class="scoring-field{% if general_errors.get('stdout_noise_mode') %} scoring-field--error{% endif %}">
+                          <span>Non-flag stdout</span>
+                          <select name="stdout_noise_mode" data-stdout-noise-mode>
+                            <option value="ignore"{% if general_form.stdout_noise_mode == 'ignore' %} selected{% endif %}>Ignore</option>
+                            <option value="unsuccessful"{% if general_form.stdout_noise_mode == 'unsuccessful' %} selected{% endif %}>Count as unsuccessful submission</option>
+                            <option value="percent_penalty"{% if general_form.stdout_noise_mode == 'percent_penalty' %} selected{% endif %}>Apply an extra percentage cost</option>
+                          </select>
+                          <small>{{ general_errors.get('stdout_noise_mode') or 'Only attack stdout is checked; diagnostics belong in stderr.' }}</small>
+                        </label>
+                        <label class="scoring-field" data-stdout-noise-penalty-field{% if general_form.stdout_noise_mode != 'percent_penalty' %} hidden{% endif %}>
+                          <span>Extra cost per noisy result</span>
+                          <input name="stdout_noise_penalty_percent" type="number" min="0" max="100" step="0.1" value="{{ general_form.stdout_noise_penalty_percent }}" required data-stdout-noise-penalty>
+                          <small>{{ general_errors.get('stdout_noise_penalty_percent') or 'Percent of this result, added after all accumulated penalties.' }}</small>
                         </label>
                       </div>
                       <div class="scoring-preview" data-scoring-preview aria-live="polite"></div>
@@ -663,6 +695,12 @@
                   </div>
                   <div class="identity-actions">
                     <button class="save-appearance" type="submit" data-appearance-save="identity">Save identity</button>
+                    <button
+                      class="reset-appearance"
+                      type="submit"
+                      formaction="{{ url_for('reset_appearance') }}"
+                      formnovalidate
+                    >Reset customization</button>
                   </div>
                 </section>
 

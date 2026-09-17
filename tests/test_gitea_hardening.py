@@ -37,6 +37,14 @@ class GiteaHardeningTests(unittest.TestCase):
         self.assertIn("memswap_limit: 1400m", compose)
         self.assertIn("pids_limit: 512", compose)
 
+    def test_internal_api_uses_a_service_account_instead_of_root(self):
+        service = (PROJECT_DIR / "docker" / "selfad-run").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('service_username="selfad-system"', service)
+        self.assertIn('--username "${service_username}"', service)
+        self.assertIn('authenticated_user}" == "${service_username}', service)
+
 
 if __name__ == "__main__":
     unittest.main()

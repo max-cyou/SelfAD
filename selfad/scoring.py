@@ -11,6 +11,7 @@ ATTACK = "attack"
 DEFENSE = "defense"
 REWARD_MODES = {"coverage", "per_flag"}
 PENALTY_MODES = {"none", "points", "percent", "compound_percent"}
+STDOUT_NOISE_MODES = {"ignore", "unsuccessful", "percent_penalty"}
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,7 @@ def record_submission_score(
     functionality_passed: bool,
     completed: bool,
     message: str,
+    stdout_noise: bool = False,
 ) -> ScoreDecision:
     current_score = player.attack_score if kind == ATTACK else player.defense_score
     previous_attempts = session.scalar(
@@ -100,19 +102,37 @@ def record_submission_score(
         )
     ) or 0
 
+    stdout_noise_mode = getattr(settings, "stdout_noise_mode", "ignore")
+    # Compatibility for databases created before the mode selector existed.
+    if stdout_noise_mode not in STDOUT_NOISE_MODES:
+        stdout_noise_mode = "ignore"
+    if (
+        stdout_noise_mode == "ignore"
+        and getattr(settings, "penalize_stdout_noise", False)
+    ):
+        stdout_noise_mode = "unsuccessful"
+    noisy_attack_output = (
+        kind == ATTACK
+        and stdout_noise
+        and stdout_noise_mode == "unsuccessful"
+    )
     raw_score = calculate_raw_score(
         settings,
         kind=kind,
         matched_flags=matched_flags,
         injected_flags=injected_flags,
-        completed=completed,
+        completed=completed and not noisy_attack_output,
     )
     improved = raw_score > previous_best_raw
     check_error = not completed
     penalty_eligible = (
         not improved
         and settings.penalty_mode != "none"
-        and (settings.penalize_check_errors or not check_error)
+        and (
+            noisy_attack_output
+            or settings.penalize_check_errors
+            or not check_error
+        )
     )
     free_failures = (
         settings.attack_free_failures
@@ -131,6 +151,21 @@ def record_submission_score(
         penalty_attempts,
         penalty_value,
     ) if improved else 0
+    if (
+        improved
+        and kind == ATTACK
+        and stdout_noise
+        and stdout_noise_mode == "percent_penalty"
+    ):
+        noise_penalty = _round_points(
+            raw_score * min(
+                100.0,
+                max(0.0, settings.stdout_noise_penalty_percent),
+            ) / 100
+        )
+        # The output fee is additive: accumulated unsuccessful-attempt debt is
+        # still applied to the same result.
+        penalty = min(raw_score, penalty + noise_penalty)
     awarded_score = max(0, raw_score - penalty) if improved else 0
 
     session.add(
@@ -150,6 +185,7 @@ def record_submission_score(
             completed=completed,
             improved=improved,
             penalty_eligible=penalty_eligible,
+            stdout_noise=stdout_noise,
             raw_score=raw_score,
             penalty=penalty,
             awarded_score=awarded_score,

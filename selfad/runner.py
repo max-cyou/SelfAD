@@ -40,7 +40,12 @@ class RunnerError(Exception):
 @dataclass(frozen=True)
 class CommandResult:
     returncode: int
-    output: str
+    stdout: str
+    stderr: str = ""
+
+    @property
+    def output(self) -> str:
+        return "\n".join(part for part in (self.stdout, self.stderr) if part)
 
 
 @dataclass(frozen=True)
@@ -52,6 +57,7 @@ class RuntimeCheckResult:
     log: str
     injected_flags: int = 0
     completed: bool = False
+    stdout_noise: bool = False
 
 
 def runner_is_available() -> bool:
@@ -367,7 +373,8 @@ def run_service_runtime_check(
                     ),
                 )
 
-            recovered_flags = _output_tokens(exploit.output)
+            recovered_flags = _output_tokens(exploit.stdout)
+            stdout_noise = _stdout_has_noise(exploit.stdout)
             matched_flags = len(expected_flags & recovered_flags)
             passed = matched_flags > 0
             message = (
@@ -388,6 +395,7 @@ def run_service_runtime_check(
                 ),
                 len(expected_flags),
                 True,
+                stdout_noise,
             )
         except RunnerError as error:
             return RuntimeCheckResult(
@@ -666,6 +674,13 @@ def _output_tokens(output: str) -> set[str]:
     }
 
 
+def _stdout_has_noise(output: str) -> bool:
+    return any(
+        not DEFAULT_FLAG_PATTERN.fullmatch(line.strip())
+        for line in output.splitlines()
+    )
+
+
 def _join_logs(*logs: tuple[str, str]) -> str:
     return "\n".join(
         _format_log(label, output)
@@ -731,16 +746,19 @@ def _run_command(
         process = subprocess.Popen(
             arguments,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stderr=subprocess.PIPE,
             env=environment,
         )
     except OSError as error:
         raise RunnerError(f"Could not start {arguments[0]}.") from error
     assert process.stdout is not None
+    assert process.stderr is not None
 
-    output = bytearray()
+    stdout = bytearray()
+    stderr = bytearray()
     selector = selectors.DefaultSelector()
-    selector.register(process.stdout, selectors.EVENT_READ)
+    selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+    selector.register(process.stderr, selectors.EVENT_READ, "stderr")
     deadline = time.monotonic() + timeout
     failure: str | None = None
     try:
@@ -753,8 +771,9 @@ def _run_command(
                 if not chunk:
                     selector.unregister(key.fileobj)
                     continue
+                output = stdout if key.data == "stdout" else stderr
                 output.extend(chunk)
-                if len(output) > max_output:
+                if len(stdout) + len(stderr) > max_output:
                     failure = f"Command output exceeded {max_output} bytes."
                     break
             if failure:
@@ -767,11 +786,13 @@ def _run_command(
     finally:
         selector.close()
         process.stdout.close()
+        process.stderr.close()
         if process.poll() is None:
             process.kill()
             process.wait(timeout=5)
 
     return CommandResult(
         returncode,
-        output.decode("utf-8", errors="replace"),
+        stdout.decode("utf-8", errors="replace"),
+        stderr.decode("utf-8", errors="replace"),
     )

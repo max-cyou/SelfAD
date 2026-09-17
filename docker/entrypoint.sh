@@ -10,7 +10,7 @@ legacy_password_file="${secrets_dir}/gitlab_root_password"
 
 install -d -m 0755 -o root -g root "${state_dir}"
 install -d -m 0750 -o selfad -g selfad "${data_dir}"
-install -d -m 0750 -o root -g selfad "${secrets_dir}"
+install -d -m 0770 -o root -g selfad "${secrets_dir}"
 
 if [ ! -s "${password_file}" ]; then
     umask 077
@@ -22,7 +22,7 @@ if [ ! -s "${password_file}" ]; then
     fi
 fi
 chown root:selfad "${password_file}"
-chmod 0440 "${password_file}"
+chmod 0660 "${password_file}"
 
 echo "SelfAD and Gitea will run inside this container."
 if [ "${SELFAD_ENABLE_INTERNAL_RUNNER:-false}" = "true" ] \

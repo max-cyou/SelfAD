@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import datetime, timezone
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -32,6 +33,7 @@ from selfad.models import (
     Service,
     ServiceRunStatus,
     ServiceStatus,
+    SubmissionAttempt,
     User,
 )
 from selfad.participants import provision_participant_service
@@ -52,6 +54,23 @@ DEFAULT_REGISTRATION_FORM = {
     "email": "",
     "ssh_public_key": "",
 }
+
+
+def _scoreboard_time(value: datetime | None) -> float:
+    if value is None:
+        return float("inf")
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.timestamp()
+
+
+def _scoreboard_sort_key(row: dict[str, object]) -> tuple[object, ...]:
+    return (
+        -int(row["score"]),
+        _scoreboard_time(row["first_solution_at"]),
+        _scoreboard_time(row["last_solution_at"]),
+        str(row["username"]),
+    )
 
 
 def participant_access(
@@ -95,7 +114,7 @@ def participant_services(
             ParticipantService.user_id == user.id,
             Service.status == ServiceStatus.ACTIVE,
         )
-        .order_by(Service.name, Service.id)
+        .order_by(Service.id)
     ).all()
     cards = [
         {
@@ -142,7 +161,7 @@ def render_scoreboard(
     active_services = session.scalars(
         select(Service)
         .where(Service.status == ServiceStatus.ACTIVE)
-        .order_by(Service.slug, Service.id)
+        .order_by(Service.id)
     ).all()
     active_service_ids = {service.id for service in active_services}
     assignments = session.scalars(select(ParticipantService)).all()
@@ -173,6 +192,33 @@ def render_scoreboard(
             "defense": assignment.defense_score,
         }
 
+    active_assignments = [
+        assignment
+        for assignment in assignments
+        if assignment.service_id in active_service_ids
+    ]
+    assignment_users = {
+        assignment.id: assignment.user_id for assignment in active_assignments
+    }
+    solution_attempts = session.scalars(
+        select(SubmissionAttempt).where(
+            SubmissionAttempt.participant_service_id.in_(assignment_users),
+            SubmissionAttempt.awarded_score > 0,
+        )
+    ).all()
+    first_solution_by_user = {}
+    last_solution_by_user = {}
+    for attempt in solution_attempts:
+        user_id = assignment_users.get(attempt.participant_service_id)
+        if user_id is None:
+            continue
+        first = first_solution_by_user.get(user_id)
+        last = last_solution_by_user.get(user_id)
+        if first is None or attempt.created_at < first:
+            first_solution_by_user[user_id] = attempt.created_at
+        if last is None or attempt.created_at > last:
+            last_solution_by_user[user_id] = attempt.created_at
+
     rows = [
         {
             "username": participant.username,
@@ -180,6 +226,8 @@ def render_scoreboard(
             "defense": totals[user_id]["defense"],
             "services": totals[user_id]["services"],
             "score": totals[user_id]["attack"] + totals[user_id]["defense"],
+            "first_solution_at": first_solution_by_user.get(user_id),
+            "last_solution_at": last_solution_by_user.get(user_id),
             "service_scores": [
                 scores_by_user_service.get(
                     (user_id, service.id),
@@ -191,7 +239,7 @@ def render_scoreboard(
         for user_id, participant in participants.items()
         if totals[user_id]["attack"] + totals[user_id]["defense"] >= 1
     ]
-    rows.sort(key=lambda row: (-row["score"], -row["attack"], row["username"]))
+    rows.sort(key=_scoreboard_sort_key)
     previous_score: int | None = None
     current_rank = 0
     for index, row in enumerate(rows, start=1):

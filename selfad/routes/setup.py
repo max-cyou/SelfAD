@@ -7,8 +7,15 @@ from sqlalchemy.orm import Session
 
 from selfad.auth import csrf_token_is_valid, get_csrf_token
 from selfad.database import get_session
+from selfad.gitea import (
+    GiteaConflict,
+    GiteaUnavailable,
+    authenticate_gitea_user,
+    update_gitea_user,
+)
 from selfad.models import BrandingSettings, InstanceConfig, User
 from selfad.security import hash_password
+from selfad.settings import get_gitea_settings, set_gitea_root_password
 from selfad.web import templates
 
 
@@ -144,6 +151,34 @@ def submit_setup(
             status_code=422,
         )
 
+    try:
+        gitea_settings = get_gitea_settings()
+        update_gitea_user(
+            gitea_settings,
+            username="root",
+            email=admin_email,
+            password=admin_password,
+        )
+        gitea_admin = authenticate_gitea_user(
+            gitea_settings,
+            username="root",
+            password=admin_password,
+        )
+        if gitea_admin is None:
+            raise GiteaUnavailable("Gitea rejected the administrator password.")
+        set_gitea_root_password(admin_password)
+    except (GiteaConflict, GiteaUnavailable, OSError) as error:
+        return render_setup(
+            request,
+            site_name=site_name,
+            admin_username=admin_username,
+            admin_email=admin_email,
+            change_title=change_title,
+            remove_standard_logo=remove_standard_logo,
+            errors={"_form": str(error)},
+            status_code=502,
+        )
+
     if config is None:
         config = InstanceConfig(id=1)
 
@@ -165,6 +200,8 @@ def submit_setup(
                 email=admin_email,
                 password_hash=hash_password(admin_password),
                 is_admin=True,
+                gitea_user_id=gitea_admin.id,
+                gitea_username=gitea_admin.username,
             ),
         ]
     )

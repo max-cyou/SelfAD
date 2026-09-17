@@ -23,6 +23,10 @@ class InstanceConfig(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    contest_ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     registration_enabled: Mapped[bool] = mapped_column(
         default=False,
         nullable=False,
@@ -166,6 +170,14 @@ class ScoringSettings(Base):
     attack_free_failures: Mapped[int] = mapped_column(default=0, nullable=False)
     defense_free_failures: Mapped[int] = mapped_column(default=0, nullable=False)
     penalize_check_errors: Mapped[bool] = mapped_column(default=True, nullable=False)
+    # Kept for an in-place upgrade from releases which exposed this as a checkbox.
+    penalize_stdout_noise: Mapped[bool] = mapped_column(default=False, nullable=False)
+    stdout_noise_mode: Mapped[str] = mapped_column(
+        String(24), default="ignore", nullable=False
+    )
+    stdout_noise_penalty_percent: Mapped[float] = mapped_column(
+        default=1.0, nullable=False
+    )
     attack_requirements: Mapped[str] = mapped_column(
         Text, default="", nullable=False
     )
@@ -446,6 +458,7 @@ class SubmissionAttempt(Base):
     completed: Mapped[bool] = mapped_column(default=False, nullable=False)
     improved: Mapped[bool] = mapped_column(default=False, nullable=False)
     penalty_eligible: Mapped[bool] = mapped_column(default=False, nullable=False)
+    stdout_noise: Mapped[bool] = mapped_column(default=False, nullable=False)
     raw_score: Mapped[int] = mapped_column(default=0, nullable=False)
     penalty: Mapped[int] = mapped_column(default=0, nullable=False)
     awarded_score: Mapped[int] = mapped_column(default=0, nullable=False)

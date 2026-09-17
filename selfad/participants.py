@@ -15,7 +15,19 @@ from selfad.settings import GiteaSettings
 
 
 ATTACK_DOCKERFILE = b'FROM python:3.13-alpine\nWORKDIR /workspace\nCMD ["python", "exploit.py"]\n'
-ATTACK_EXPLOIT = b"import os\n\n# Print recovered flags, one per line.\nprint()\n"
+ATTACK_EXPLOIT = b'''import os
+import sys
+
+# SELFAD_TARGET is a complete in-network URL, e.g. http://target:8080.
+target = os.environ.get("SELFAD_TARGET") or sys.argv[1]
+target = target.rstrip("/")
+
+# Example when the organizer provides the requests package:
+# import requests
+# response = requests.get(f"{target}/your-endpoint", timeout=5)
+
+# Print only recovered flags: one exact 32-character A-Z/0-9 flag per line.
+'''
 
 
 def provision_participant_service(
