@@ -18,6 +18,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     GITEA__security__INSTALL_LOCK=true \
     GITEA__service__DISABLE_REGISTRATION=true \
     GITEA__service__REQUIRE_SIGNIN_VIEW=true \
+    GITEA__repository__FORCE_PRIVATE=true \
+    GITEA__repository__MAX_CREATION_LIMIT=0 \
+    GITEA__repository__DISABLE_HTTP_GIT=true \
+    GITEA__repository__DISABLE_MIGRATIONS=true \
+    GITEA__repository__upload__ENABLED=false \
+    GITEA__attachment__ENABLED=false \
+    GITEA__packages__ENABLED=false \
     GITEA__webhook__ALLOWED_HOST_LIST=loopback \
     GITEA__actions__ENABLED=false
 

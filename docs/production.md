@@ -52,6 +52,12 @@ Set `SELFAD_GITEA_PUBLIC_URL`, `SELFAD_GITEA_DOMAIN`,
 participants actually use. They control clone URLs displayed by Gitea; leaving
 the image defaults would publish `localhost` links.
 
+The supplied image forces repositories private, disables participant repository
+creation, HTTP Git, repository migrations, file attachments and Gitea packages.
+Participants must use the SSH key they gave SelfAD to work with assigned
+repositories. The local Gitea site administrator remains able to provision
+tournament repositories.
+
 The runner TLS directory must contain `ca.pem`, `cert.pem` and `key.pem`.
 Do not publish Docker TCP without TLS, and firewall it so only the SelfAD
 control-plane address can reach it.
