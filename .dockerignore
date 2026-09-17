@@ -1,6 +1,10 @@
-.git
-.gitignore
-.venv
-__pycache__
-*.py[cod]
-README.md
+# Send only files the runtime image actually needs. This prevents accidental
+# transfer of local databases, keys, test fixtures and editor files to Docker.
+*
+!Dockerfile
+!requirements.txt
+!main.py
+!selfad/
+!selfad/**
+!docker/
+!docker/**
