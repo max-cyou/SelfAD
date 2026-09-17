@@ -52,27 +52,6 @@ Set `SELFAD_GITEA_PUBLIC_URL`, `SELFAD_GITEA_DOMAIN`,
 participants actually use. They control clone URLs displayed by Gitea; leaving
 the image defaults would publish `localhost` links.
 
-Build the image as usual, then point it at the remote Docker daemon. Mount the
-three client TLS files at `/run/selfad-runner-tls` as read-only.
-
-```bash
-docker build -t selfad .
-docker run -d --name selfad \
-  --memory=1g --memory-swap=2g --shm-size=64m \
-  -p 8000:8000 -p 8929:8929 -p 2224:22 \
-  -v selfad-data:/data \
-  -v /srv/selfad/runner-tls:/run/selfad-runner-tls:ro \
-  -e SELFAD_ENABLE_INTERNAL_RUNNER=false \
-  -e SELFAD_DATABASE_URL=postgresql+psycopg://selfad:change-me@postgres.internal:5432/selfad \
-  -e SELFAD_RUNNER_DOCKER_HOST=tcp://runner-1.internal:2376 \
-  -e SELFAD_RUNNER_TLS_VERIFY=true \
-  -e SELFAD_RUNNER_CERT_PATH=/run/selfad-runner-tls \
-  -e SELFAD_SECURE_COOKIES=true \
-  -e SELFAD_GITEA_PUBLIC_URL=https://git.ctf.example \
-  -e SELFAD_GITEA_WEBHOOK_URL=http://127.0.0.1:8000/hooks/gitea \
-  selfad
-```
-
 The runner TLS directory must contain `ca.pem`, `cert.pem` and `key.pem`.
 Do not publish Docker TCP without TLS, and firewall it so only the SelfAD
 control-plane address can reach it.
