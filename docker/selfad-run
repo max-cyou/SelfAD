@@ -81,16 +81,11 @@ fi
 
 echo "Local Gitea API access configured. Starting SelfAD."
 
-attempt=0
-until docker info >/dev/null 2>&1; do
-    attempt=$((attempt + 1))
-    if (( attempt % 12 == 1 )); then
-        echo "Waiting for the configured Docker runner (${SELFAD_RUNNER_DOCKER_HOST})..."
-    fi
-    sleep 5
-done
-
-echo "Configured Docker runner is ready."
+if docker info >/dev/null 2>&1; then
+    echo "Configured Docker runner is ready."
+else
+    echo "Configured Docker runner is unavailable; starting the control plane in degraded mode."
+fi
 exec su-exec selfad:selfad \
     /opt/selfad/venv/bin/uvicorn \
     main:app \
