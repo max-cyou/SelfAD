@@ -36,7 +36,7 @@ services:
       # The control plane stays available until a dedicated TLS runner is connected.
       SELFAD_RUNNER_DOCKER_HOST: ${SELFAD_RUNNER_DOCKER_HOST:-tcp://127.0.0.1:2376}
       SELFAD_RUNNER_TLS_VERIFY: ${SELFAD_RUNNER_TLS_VERIFY:-false}
-      SELFAD_RUNNER_CERT_PATH: /run/selfad-runner-tls
+      SELFAD_RUNNER_CERT_PATH: ${SELFAD_RUNNER_CERT_PATH:-/run/selfad-runner-tls}
       SELFAD_SECURE_COOKIES: "true"
       SELFAD_GITEA_PUBLIC_URL: https://luna.maxcyou.ru/git
       SELFAD_GITEA_WEBHOOK_URL: http://127.0.0.1:8000/hooks/gitea

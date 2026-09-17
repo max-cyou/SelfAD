@@ -1,0 +1,35 @@
+# Temporary, single-host test runner. It is deliberately not part of the
+# production profile: participant-controlled builds still share one VPS with
+# the control plane. No runner API port is published on the host.
+services:
+  selfad:
+    environment:
+      SELFAD_RUNNER_DOCKER_HOST: tcp://docker:2376
+      SELFAD_RUNNER_TLS_VERIFY: "true"
+      SELFAD_RUNNER_CERT_PATH: /run/selfad-runner-tls/client
+    volumes:
+      - selfad-temp-runner-certs:/run/selfad-runner-tls:ro
+
+  temporary-runner:
+    image: docker:29-dind
+    hostname: docker
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+    volumes:
+      - selfad-temp-runner-certs:/certs
+      - selfad-temp-runner-data:/var/lib/docker
+    mem_limit: 768m
+    memswap_limit: 768m
+    cpus: 1.0
+    pids_limit: 256
+    shm_size: 64m
+    networks:
+      proxy:
+        aliases:
+          - docker
+
+volumes:
+  selfad-temp-runner-certs:
+  selfad-temp-runner-data:

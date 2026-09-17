@@ -16,7 +16,14 @@ from selfad.settings import get_runner_settings
 
 class RunnerSecurityTests(unittest.TestCase):
     def test_internal_runner_is_opt_in(self):
-        with patch.dict(os.environ, {"SELFAD_ENABLE_INTERNAL_RUNNER": "false"}):
+        with patch.dict(
+            os.environ,
+            {
+                "SELFAD_ENABLE_INTERNAL_RUNNER": "false",
+                "SELFAD_RUNNER_DOCKER_HOST": "unix:///run/selfad-docker/docker.sock",
+            },
+            clear=True,
+        ):
             settings = get_runner_settings()
             self.assertFalse(settings.internal_runner_enabled)
             self.assertEqual(runner_mode(), "unavailable")

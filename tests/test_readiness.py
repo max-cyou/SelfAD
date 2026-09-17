@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -15,7 +16,15 @@ class ReadinessTests(unittest.TestCase):
         connection = MagicMock()
         engine.connect.return_value.__enter__.return_value = connection
 
-        response = health.readiness()
+        with patch.dict(
+            os.environ,
+            {
+                "SELFAD_ENABLE_INTERNAL_RUNNER": "false",
+                "SELFAD_RUNNER_DOCKER_HOST": "unix:///run/selfad-docker/docker.sock",
+            },
+            clear=True,
+        ):
+            response = health.readiness()
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(json.loads(response.body), {
