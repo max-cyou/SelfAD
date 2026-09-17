@@ -55,7 +55,42 @@ docker version
 Never expose port `2376` without TLS. Firewall it so only the control-plane IP
 can reach it. Do not route it through a public reverse proxy.
 
-## 3. Network and lifecycle
+For a fresh Debian/Ubuntu runner, the repository includes the equivalent
+guarded installer. It refuses a host with existing Docker containers, enables
+Docker user namespaces, disables default bridge inter-container communication,
+and only proceeds if it can add a UFW allow rule or you explicitly confirm an
+equivalent cloud/nftables firewall rule.
+
+```bash
+SELFAD_RUNNER_FIREWALL_CONFIRMED=true \
+  sudo ./scripts/runner-install.sh /path/to/runner 2.26.125.223
+```
+
+Use `SELFAD_RUNNER_FIREWALL_CONFIRMED=true` only after configuring an external
+firewall to allow `2.26.125.223/tcp:2376` and deny every other source.
+
+## 3. Connect the control plane
+
+Copy the `control-plane` directory (not `ca-key.pem`) to the public control
+plane as `/opt/selfad/runner-tls`, mode `0700`. In `/opt/selfad/.env`, set:
+
+```dotenv
+SELFAD_RUNNER_DOCKER_HOST=tcp://runner-1.internal:2376
+SELFAD_RUNNER_TLS_VERIFY=true
+SELFAD_RUNNER_TLS_DIR=/opt/selfad/runner-tls
+```
+
+Then rebuild/restart only SelfAD and check readiness:
+
+```bash
+cd /opt/selfad
+docker-compose --env-file .env -f deploy/luna/compose.yaml up -d selfad
+curl --fail https://luna.maxcyou.ru/ready
+```
+
+The response must contain `"runner":true` and `"runner_mode":"external"`.
+
+## 4. Network and lifecycle
 
 Allow runner-host egress only to approved image/package mirrors for image
 builds. SelfAD creates each submitted job on an internal Docker network, so
