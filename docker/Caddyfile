@@ -1,9 +1,9 @@
 {$SELFAD_PUBLIC_DOMAIN} {
-    encode zstd gzip
-    reverse_proxy selfad:8000
+	encode zstd gzip
+	reverse_proxy selfad:8000
 }
 
 {$SELFAD_GITEA_DOMAIN} {
-    encode zstd gzip
-    reverse_proxy selfad:8929
+	encode zstd gzip
+	reverse_proxy selfad:8929
 }
