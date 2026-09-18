@@ -34,5 +34,15 @@ class HttpsOverlayTests(unittest.TestCase):
         self.assertIn("edge:", selfad_section)
 
 
+class PinnedGatewayTests(unittest.TestCase):
+    def test_default_network_gateway_is_pinned_and_trusted_by_default(self):
+        compose = (PROJECT_DIR / "compose.yaml").read_text(encoding="utf-8")
+        self.assertIn("- subnet: 172.31.201.0/24", compose)
+        self.assertIn(
+            "SELFAD_TRUSTED_PROXY_HOSTS: ${SELFAD_TRUSTED_PROXY_HOSTS:-172.31.201.1}",
+            compose,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

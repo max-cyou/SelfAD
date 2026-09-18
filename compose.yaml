@@ -35,7 +35,7 @@ services:
       SELFAD_RUNNER_TLS_VERIFY: "true"
       SELFAD_RUNNER_CERT_PATH: /run/selfad-runner-tls/client
       SELFAD_TRUST_PROXY_HEADERS: ${SELFAD_TRUST_PROXY_HEADERS:-false}
-      SELFAD_TRUSTED_PROXY_HOSTS: ${SELFAD_TRUSTED_PROXY_HOSTS:-}
+      SELFAD_TRUSTED_PROXY_HOSTS: ${SELFAD_TRUSTED_PROXY_HOSTS:-172.31.201.1}
       SELFAD_GITEA_PUBLIC_URL: ${SELFAD_GITEA_PUBLIC_URL:-http://localhost:8929}
       GITEA__server__DOMAIN: ${SELFAD_GITEA_DOMAIN:-localhost}
       GITEA__server__ROOT_URL: ${SELFAD_GITEA_PUBLIC_URL:-http://localhost:8929}/
@@ -51,3 +51,12 @@ services:
 volumes:
   selfad-data:
   runner-certs:
+
+# Pinned subnet so the network gateway (172.31.201.1) is the same on every
+# host; it is the default trusted proxy address for proxies running on the
+# Docker host (nginx, Caddy installed outside Compose).
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.31.201.0/24

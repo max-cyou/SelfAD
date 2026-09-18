@@ -42,9 +42,6 @@ and forwarding to the panel, then tell SelfAD to trust that proxy so it renders
 
 ```dotenv
 SELFAD_TRUST_PROXY_HEADERS=true
-# Address of the proxy as the container sees it; for a proxy on the Docker
-# host this is the compose network gateway: docker network inspect selfad_default
-SELFAD_TRUSTED_PROXY_HOSTS=192.168.0.1
 SELFAD_GITEA_PUBLIC_URL=https://git.ctf.example
 SELFAD_GITEA_DOMAIN=git.ctf.example
 SELFAD_GITEA_SSH_DOMAIN=ctf.example
@@ -53,8 +50,10 @@ SELFAD_GITEA_HTTP_BIND=127.0.0.1
 ```
 
 The proxy must pass `X-Forwarded-Proto` (a standard `proxy_set_header` setup
-does). Restart with `docker compose up -d`. The loopback binds keep outsiders
-from bypassing the proxy; leave them out while you still need direct
+does). No proxy address is needed for a proxy on the Docker host: the Compose
+network gateway is pinned, and its address is the default trusted proxy.
+Restart with `docker compose up -d`. The loopback binds keep outsiders from
+bypassing the proxy; leave them out while you still need direct
 `http://IP:8000` access.
 
 The bundled runner is suitable for local development and test events. It runs
