@@ -204,6 +204,7 @@ def process_next_repository_batch() -> bool:
             repository_path=repository_path,
             jury_repository_path=jury_repository_path,
             contract=contract,
+            cache_service_image=True,
         )
     except (GiteaError, RunnerError) as error:
         _finish_batch_as_failure(batch, str(error), contract_is_valid=True)
@@ -489,7 +490,7 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
                 ),
             )
             contract = ServiceContractResult(True, "Canonical runtime contract.", service.runtime_source_commit, service.runtime_jury_commit, service.container_port, service.healthcheck_path)
-            runtime = run_service_runtime_check(settings, repository_path=service.repository_path, jury_repository_path=jury_path, contract=contract, exploit_repository_path=repository_path, exploit_commit=batch.commit_sha, exploit_runtime_requirements=attack_requirements)
+            runtime = run_service_runtime_check(settings, repository_path=service.repository_path, jury_repository_path=jury_path, contract=contract, exploit_repository_path=repository_path, exploit_commit=batch.commit_sha, exploit_runtime_requirements=attack_requirements, cache_service_image=True)
         else:
             contract = validate_service_contract(settings, repository_path=repository_path, jury_repository_path=jury_path, default_branch=service.default_branch)
             if not contract.valid:

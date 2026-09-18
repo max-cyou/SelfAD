@@ -182,6 +182,7 @@ def main() -> int:
             repository_path=service,
             jury_repository_path=jury,
             contract=contract,
+            cache_service_image=True,
         )
         assert_result(
             canonical.passed and canonical.matched_flags == 1,
@@ -198,6 +199,7 @@ def main() -> int:
             contract=contract,
             exploit_repository_path=attack,
             exploit_commit=attack_commit,
+            cache_service_image=True,
         )
         assert_result(
             attack_result.passed and attack_result.matched_flags == 1,

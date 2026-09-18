@@ -1,3 +1,4 @@
+import hashlib
 import io
 import os
 import re
@@ -6,6 +7,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -30,7 +32,10 @@ PARTICIPANT_REQUIREMENT_PATTERN = re.compile(
     r"==[A-Za-z0-9][A-Za-z0-9_.+!~-]*$"
 )
 RUNNER_LABEL = "selfad.managed=true"
+SERVICE_CACHE_LABEL = "selfad.cache=canonical-service"
+MAX_CACHED_SERVICE_IMAGES = 32
 RUNNER_USER = "10001:10001"
+_SERVICE_CACHE_BUILD_LOCK = threading.Lock()
 
 
 class RunnerError(Exception):
@@ -58,6 +63,31 @@ class RuntimeCheckResult:
     injected_flags: int = 0
     completed: bool = False
     stdout_noise: bool = False
+
+
+def _service_cache_image_name(source_commit: str) -> str:
+    return f"selfad-service-cache-{source_commit.lower()}:latest"
+
+
+def _prune_service_image_cache() -> None:
+    result = _docker(
+        [
+            "images",
+            "--format",
+            "{{.Repository}}:{{.Tag}}",
+            "--filter",
+            f"label={SERVICE_CACHE_LABEL}",
+        ],
+        timeout=30,
+        max_output=32 * 1024,
+    )
+    if result.returncode != 0:
+        return
+    images = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if len(images) > MAX_CACHED_SERVICE_IMAGES:
+        _docker_quiet(
+            ["image", "rm", "--force", *images[MAX_CACHED_SERVICE_IMAGES:]]
+        )
 
 
 def runner_is_available() -> bool:
@@ -117,6 +147,7 @@ def run_service_runtime_check(
     exploit_repository_path: str | None = None,
     exploit_commit: str | None = None,
     exploit_runtime_requirements: bytes | None = None,
+    cache_service_image: bool = False,
 ) -> RuntimeCheckResult:
     if (
         not contract.valid
@@ -131,11 +162,22 @@ def run_service_runtime_check(
             "The configured Docker runner is unavailable."
         )
 
-    source_archive = download_repository_archive(
-        settings,
-        repository_path,
-        ref=contract.source_commit,
-    )
+    service_image_cached = False
+    service_cache_lock_held = False
+    if cache_service_image:
+        image_name = _service_cache_image_name(contract.source_commit)
+        service_image_cached = (
+            _docker(["image", "inspect", image_name], timeout=15).returncode == 0
+        )
+    else:
+        image_name = ""
+    source_archive = None
+    if not service_image_cached:
+        source_archive = download_repository_archive(
+            settings,
+            repository_path,
+            ref=contract.source_commit,
+        )
     jury_archive = download_repository_archive(
         settings,
         jury_repository_path,
@@ -152,7 +194,8 @@ def run_service_runtime_check(
 
     WORK_DIR.mkdir(parents=True, exist_ok=True)
     job_id = uuid.uuid4().hex[:12]
-    image_name = f"selfad-check-{job_id}:latest"
+    if not cache_service_image:
+        image_name = f"selfad-check-{job_id}:latest"
     jury_image_name = f"selfad-jury-{job_id}:latest"
     exploit_image_name = f"selfad-attack-{job_id}:latest"
     network_name = f"selfad-check-{job_id}"
@@ -167,33 +210,51 @@ def run_service_runtime_check(
         source_path = job_path / "service"
         jury_path = job_path / "jury"
         exploit_path = job_path / "exploit"
-        _extract_repository_archive(source_archive, source_path)
+        if source_archive is not None:
+            _extract_repository_archive(source_archive, source_path)
         _extract_repository_archive(jury_archive, jury_path)
         _extract_repository_archive(exploit_archive, exploit_path)
 
         try:
             functionality_passed = False
-            build = _docker(
-                [
-                    "build",
-                    "--label",
-                    RUNNER_LABEL,
-                    "--tag",
-                    image_name,
-                    str(source_path),
-                ],
-                timeout=300,
-                max_output=2 * 1024 * 1024,
-            )
-            build_log = build.output
-            if build.returncode != 0:
-                return RuntimeCheckResult(
-                    False,
-                    False,
-                    "Service image build failed.",
-                    0,
-                    _format_log("build", build.output),
+            if cache_service_image and not service_image_cached:
+                _SERVICE_CACHE_BUILD_LOCK.acquire()
+                service_cache_lock_held = True
+                service_image_cached = (
+                    _docker(
+                        ["image", "inspect", image_name], timeout=15
+                    ).returncode
+                    == 0
                 )
+            if not service_image_cached:
+                build_label = (
+                    SERVICE_CACHE_LABEL if cache_service_image else RUNNER_LABEL
+                )
+                build = _docker(
+                    [
+                        "build",
+                        "--label",
+                        build_label,
+                        "--tag",
+                        image_name,
+                        str(source_path),
+                    ],
+                    timeout=300,
+                    max_output=2 * 1024 * 1024,
+                )
+                build_log = build.output
+                if build.returncode != 0:
+                    return RuntimeCheckResult(
+                        False,
+                        False,
+                        "Service image build failed.",
+                        0,
+                        _format_log("build", build.output),
+                    )
+                if cache_service_image:
+                    _prune_service_image_cache()
+                    _SERVICE_CACHE_BUILD_LOCK.release()
+                    service_cache_lock_held = False
 
             jury_requirements = _read_requirements_file(
                 jury_path / "requirements.txt",
@@ -204,6 +265,7 @@ def run_service_runtime_check(
                 jury_image_name,
                 job_path / "jury-runtime",
                 jury_path,
+                cache_namespace=f"jury:{jury_repository_path}",
             )
             if jury_build is not None and jury_build.returncode != 0:
                 return RuntimeCheckResult(
@@ -221,6 +283,7 @@ def run_service_runtime_check(
                     exploit_image_name,
                     job_path / "attack-runtime",
                     exploit_path,
+                    cache_namespace=f"attack:{exploit_repository_path}",
                 )
                 if exploit_build is not None and exploit_build.returncode != 0:
                     return RuntimeCheckResult(
@@ -406,6 +469,8 @@ def run_service_runtime_check(
                 _format_log("build", build_log),
             )
         finally:
+            if service_cache_lock_held:
+                _SERVICE_CACHE_BUILD_LOCK.release()
             for container_name in (
                 exploit_name,
                 injector_name,
@@ -414,7 +479,8 @@ def run_service_runtime_check(
             ):
                 _docker_quiet(["rm", "--force", container_name])
             _docker_quiet(["network", "rm", network_name])
-            _docker_quiet(["image", "rm", "--force", image_name])
+            if not cache_service_image:
+                _docker_quiet(["image", "rm", "--force", image_name])
             _docker_quiet(["image", "rm", "--force", jury_image_name])
             _docker_quiet(["image", "rm", "--force", exploit_image_name])
 
@@ -570,6 +636,8 @@ def _prepare_runtime_image(
     image_name: str,
     context: Path,
     scripts_path: Path,
+    *,
+    cache_namespace: str,
 ) -> tuple[str, CommandResult | None]:
     base_image = _docker(["image", "inspect", JURY_IMAGE], timeout=15)
     if base_image.returncode != 0:
@@ -585,12 +653,17 @@ def _prepare_runtime_image(
         _validate_requirements(requirements, label="Requirements")
     context.mkdir()
     shutil.copytree(scripts_path, context / "workspace")
-    dockerfile = "FROM python:3.13-alpine\n"
+    dockerfile = "# syntax=docker/dockerfile:1\nFROM python:3.13-alpine\n"
     if requirements and requirements.strip():
         (context / "requirements.txt").write_bytes(requirements)
+        cache_id = hashlib.sha256(
+            cache_namespace.encode("utf-8") + b"\0" + requirements
+        ).hexdigest()[:16]
         dockerfile += (
             "COPY requirements.txt /tmp/selfad-requirements.txt\n"
-            "RUN python -m pip install --no-cache-dir --disable-pip-version-check "
+            f"RUN --mount=type=cache,id=selfad-pip-{cache_id},"
+            "target=/root/.cache/pip,sharing=locked "
+            "python -m pip install --disable-pip-version-check "
             "-r /tmp/selfad-requirements.txt "
             "&& rm /tmp/selfad-requirements.txt\n"
         )

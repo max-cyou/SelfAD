@@ -131,6 +131,7 @@ def main() -> int:
         canonical = run_service_runtime_check(
             settings, repository_path=source, jury_repository_path=jury,
             contract=contract,
+            cache_service_image=True,
         )
         if not canonical.passed:
             raise RuntimeError(f"canonical runtime failed: {canonical.message}")
