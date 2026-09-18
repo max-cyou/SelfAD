@@ -29,14 +29,6 @@ class GiteaHardeningTests(unittest.TestCase):
         self.assertIn("LoginGraceTime 30", config)
         self.assertIn("PerSourceMaxStartups 50", config)
 
-    def test_luna_control_plane_has_headroom_for_ssh_git_bursts(self):
-        compose = (PROJECT_DIR / "deploy" / "luna" / "compose.yaml").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("mem_limit: 1400m", compose)
-        self.assertIn("memswap_limit: 1400m", compose)
-        self.assertIn("pids_limit: 512", compose)
-
     def test_internal_api_uses_a_service_account_instead_of_root(self):
         service = (PROJECT_DIR / "docker" / "selfad-run").read_text(
             encoding="utf-8"

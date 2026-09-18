@@ -1,0 +1,55 @@
+# Optional HTTPS overlay: Caddy terminates TLS with automatic Let's Encrypt
+# certificates in front of the bundled setup. No separate runner VM needed.
+#
+# Requirements:
+#   1. Two DNS A records pointing at this host before the first start
+#      (Let's Encrypt checks reachability): ctf.example and git.ctf.example.
+#   2. Ports 80, 443 and the Gitea SSH port (default 2224) open in the firewall.
+#   3. In .env: SELFAD_PUBLIC_DOMAIN, SELFAD_GITEA_DOMAIN and the public Gitea
+#      URL variables from .env.example. Optional but recommended: set
+#      SELFAD_HTTP_BIND=127.0.0.1 and SELFAD_GITEA_HTTP_BIND=127.0.0.1 so the
+#      proxy cannot be bypassed over plain HTTP.
+#
+# Start:
+#   docker compose -f compose.yaml -f compose.https.yaml up -d
+services:
+  selfad:
+    environment:
+      SELFAD_TRUST_PROXY_HEADERS: "true"
+      SELFAD_TRUSTED_PROXY_HOSTS: 172.31.255.2
+    networks:
+      default: {}
+      edge:
+        ipv4_address: 172.31.255.3
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      selfad:
+        condition: service_started
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SELFAD_PUBLIC_DOMAIN: ${SELFAD_PUBLIC_DOMAIN:?Set SELFAD_PUBLIC_DOMAIN in .env}
+      SELFAD_GITEA_DOMAIN: ${SELFAD_GITEA_DOMAIN:?Set SELFAD_GITEA_DOMAIN in .env}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - selfad-https-caddy-data:/data
+      - selfad-https-caddy-config:/config
+    mem_limit: 128m
+    networks:
+      edge:
+        ipv4_address: 172.31.255.2
+
+volumes:
+  selfad-https-caddy-data:
+  selfad-https-caddy-config:
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: 172.31.255.0/24
