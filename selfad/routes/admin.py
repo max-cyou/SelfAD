@@ -32,6 +32,7 @@ from selfad.gitea import (
     GiteaUnavailable,
     delete_repository,
     delete_gitea_user,
+    delete_user_ssh_key,
     ensure_repository_webhook,
     create_gitea_user,
     add_user_ssh_key,
@@ -1054,8 +1055,6 @@ async def update_user(
         errors["email"] = "This email is already in use."
     if target.id == current_user.id and values["role"] != "admin":
         errors["role"] = "You cannot remove your own admin access."
-    if target.ssh_public_key and values["ssh_public_key"]:
-        errors["ssh_public_key"] = "This user already has an SSH key."
     if errors:
         return render_admin(
             request,
@@ -1092,25 +1091,33 @@ async def update_user(
                 status_code=502,
             )
     if values["ssh_public_key"] and target.gitea_username:
-        try:
-            target.git_ssh_key_id = await run_in_threadpool(
-                add_user_ssh_key,
-                settings,
-                username=target.gitea_username,
-                public_key=values["ssh_public_key"],
-            )
-        except (GiteaConflict, GiteaUnavailable) as error:
-            return render_admin(
-                request,
-                session,
-                current_user,
-                participant_errors={"_form": str(error)},
-                participant_form=values,
-                user_edit_id=target.id,
-                active_section="users",
-                status_code=502,
-            )
-        target.ssh_public_key = values["ssh_public_key"]
+        if values["ssh_public_key"] != target.ssh_public_key:
+            try:
+                if target.git_ssh_key_id:
+                    await run_in_threadpool(
+                        delete_user_ssh_key,
+                        settings,
+                        username=target.gitea_username,
+                        key_id=target.git_ssh_key_id,
+                    )
+                target.git_ssh_key_id = await run_in_threadpool(
+                    add_user_ssh_key,
+                    settings,
+                    username=target.gitea_username,
+                    public_key=values["ssh_public_key"],
+                )
+            except (GiteaConflict, GiteaUnavailable) as error:
+                return render_admin(
+                    request,
+                    session,
+                    current_user,
+                    participant_errors={"_form": str(error)},
+                    participant_form=values,
+                    user_edit_id=target.id,
+                    active_section="users",
+                    status_code=502,
+                )
+            target.ssh_public_key = values["ssh_public_key"]
 
     target.email = values["email"]
     target.is_admin = values["role"] == "admin"

@@ -511,6 +511,26 @@ def add_user_ssh_key(
     return key_id
 
 
+def delete_user_ssh_key(
+    settings: GiteaSettings,
+    *,
+    username: str,
+    key_id: int,
+) -> None:
+    try:
+        _request(
+            settings,
+            "DELETE",
+            f"/admin/users/{quote(username, safe='')}/keys/{key_id}",
+        )
+    except _GiteaRequestError as error:
+        if error.status_code == 404:
+            return
+        raise GiteaUnavailable(
+            "Gitea could not remove the previous SSH key."
+        ) from error
+
+
 def create_repository_file(
     settings: GiteaSettings,
     repository_path: str,

@@ -5,7 +5,7 @@ import re
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,6 +14,7 @@ from selfad.database import get_session
 from selfad.models import (
     InstanceConfig,
     RepositoryEvent,
+    RepositoryEventStatus,
     ParticipantService,
     ParticipantRepositoryStatus,
     Service,
@@ -27,6 +28,7 @@ from selfad.settings import get_gitea_webhook_secret
 router = APIRouter()
 
 MAX_WEBHOOK_BYTES = 1_048_576
+MAX_PENDING_EVENTS_PER_REPOSITORY = 25
 COMMIT_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?$")
 
 
@@ -130,6 +132,19 @@ async def receive_gitea_webhook(
         if contest_state(config) != STARTED:
             return webhook_response(
                 "Participant push ignored: the contest is not running.",
+                202,
+            )
+        pending_events = session.scalar(
+            select(func.count())
+            .select_from(RepositoryEvent)
+            .where(
+                RepositoryEvent.repository_path == repository_path,
+                RepositoryEvent.status == RepositoryEventStatus.PENDING,
+            )
+        )
+        if (pending_events or 0) >= MAX_PENDING_EVENTS_PER_REPOSITORY:
+            return webhook_response(
+                "Push ignored: previous pushes are still being checked.",
                 202,
             )
         if repository_path == participant_service.attack_repository_path:

@@ -331,7 +331,7 @@ def run_service_runtime_check(
                 return RuntimeCheckResult(
                     False,
                     False,
-                    "Jury injector failed.",
+                    _script_failure_message("Jury injector", injector.output),
                     0,
                     _join_logs(
                         ("checker.py", checker_output),
@@ -364,7 +364,7 @@ def run_service_runtime_check(
                 return RuntimeCheckResult(
                     False,
                     True,
-                    "Jury exploit failed.",
+                    _script_failure_message("Exploit script", exploit.output),
                     0,
                     _join_logs(
                         ("checker.py", checker_output),
@@ -735,6 +735,22 @@ def _docker_quiet(arguments: list[str]) -> None:
         pass
 
 
+def _terminate_process(process: subprocess.Popen, reason: str) -> None:
+    """Stop a misbehaving command and convert a stubborn child into a RunnerError.
+
+    ``wait`` after ``kill`` can still raise ``TimeoutExpired`` for processes
+    stuck in uninterruptible I/O; without this the exception escapes the
+    worker's error handling and the batch stays in PROCESSING until restart.
+    """
+    process.kill()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired as error:
+        raise RunnerError(
+            f"{reason} The command also ignored the termination signal."
+        ) from error
+
+
 def _run_command(
     arguments: list[str],
     *,
@@ -779,17 +795,26 @@ def _run_command(
             if failure:
                 break
         if failure:
-            process.kill()
-            process.wait(timeout=5)
+            _terminate_process(process, failure)
             raise RunnerError(failure)
-        returncode = process.wait(timeout=5)
+        try:
+            returncode = process.wait(timeout=5)
+        except subprocess.TimeoutExpired as error:
+            raise RunnerError(
+                f"Command {arguments[0]} did not exit after closing its output."
+            ) from error
     finally:
         selector.close()
         process.stdout.close()
         process.stderr.close()
         if process.poll() is None:
-            process.kill()
-            process.wait(timeout=5)
+            try:
+                process.kill()
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                # The child is stuck in uninterruptible I/O; nothing more to
+                # do here. Resource cleanup by label catches it later.
+                pass
 
     return CommandResult(
         returncode,

@@ -437,6 +437,20 @@ class ParticipantService(Base):
     )
     attack_score: Mapped[int] = mapped_column(default=0, nullable=False)
     defense_score: Mapped[int] = mapped_column(default=0, nullable=False)
+    # Denormalised attempt aggregates: scoring and the scoreboard read these
+    # instead of scanning submission_attempts, which is pruned.
+    attack_attempt_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    defense_attempt_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    attack_best_raw: Mapped[int] = mapped_column(default=0, nullable=False)
+    defense_best_raw: Mapped[int] = mapped_column(default=0, nullable=False)
+    attack_penalty_attempts: Mapped[int] = mapped_column(default=0, nullable=False)
+    defense_penalty_attempts: Mapped[int] = mapped_column(default=0, nullable=False)
+    first_awarded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_awarded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     attack_message: Mapped[str] = mapped_column(Text, default="Waiting for an exploit push.", nullable=False)
     defense_message: Mapped[str] = mapped_column(Text, default="Unlocks after a successful exploit.", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)

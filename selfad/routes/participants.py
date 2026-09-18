@@ -33,7 +33,6 @@ from selfad.models import (
     Service,
     ServiceRunStatus,
     ServiceStatus,
-    SubmissionAttempt,
     User,
 )
 from selfad.participants import provision_participant_service
@@ -197,27 +196,20 @@ def render_scoreboard(
         for assignment in assignments
         if assignment.service_id in active_service_ids
     ]
-    assignment_users = {
-        assignment.id: assignment.user_id for assignment in active_assignments
-    }
-    solution_attempts = session.scalars(
-        select(SubmissionAttempt).where(
-            SubmissionAttempt.participant_service_id.in_(assignment_users),
-            SubmissionAttempt.awarded_score > 0,
-        )
-    ).all()
     first_solution_by_user = {}
     last_solution_by_user = {}
-    for attempt in solution_attempts:
-        user_id = assignment_users.get(attempt.participant_service_id)
-        if user_id is None:
+    for assignment in active_assignments:
+        if assignment.first_awarded_at is None:
             continue
+        user_id = assignment.user_id
         first = first_solution_by_user.get(user_id)
         last = last_solution_by_user.get(user_id)
-        if first is None or attempt.created_at < first:
-            first_solution_by_user[user_id] = attempt.created_at
-        if last is None or attempt.created_at > last:
-            last_solution_by_user[user_id] = attempt.created_at
+        if first is None or assignment.first_awarded_at < first:
+            first_solution_by_user[user_id] = assignment.first_awarded_at
+        if assignment.last_awarded_at is None:
+            continue
+        if last is None or assignment.last_awarded_at > last:
+            last_solution_by_user[user_id] = assignment.last_awarded_at
 
     rows = [
         {

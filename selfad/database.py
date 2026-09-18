@@ -112,6 +112,75 @@ def _migrate_existing_sqlite_schema() -> None:
                 )
             )
 
+        participant_columns = {
+            column["name"] for column in schema.get_columns("participant_services")
+        }
+        participant_column_types = {
+            "attack_attempt_count": "INTEGER NOT NULL DEFAULT 0",
+            "defense_attempt_count": "INTEGER NOT NULL DEFAULT 0",
+            "attack_best_raw": "INTEGER NOT NULL DEFAULT 0",
+            "defense_best_raw": "INTEGER NOT NULL DEFAULT 0",
+            "attack_penalty_attempts": "INTEGER NOT NULL DEFAULT 0",
+            "defense_penalty_attempts": "INTEGER NOT NULL DEFAULT 0",
+            "first_awarded_at": "DATETIME",
+            "last_awarded_at": "DATETIME",
+        }
+        if any(
+            name not in participant_columns
+            for name in participant_column_types
+        ):
+            for name, column_type in participant_column_types.items():
+                if name not in participant_columns:
+                    connection.execute(
+                        text(
+                            f"ALTER TABLE participant_services ADD COLUMN "
+                            f"{name} {column_type}"
+                        )
+                    )
+            # Backfill the aggregates from the existing attempt history; the
+            # tables are small enough for a one-off full scan.
+            connection.execute(
+                text(
+                    """
+                    UPDATE participant_services SET
+                        attack_attempt_count = COALESCE((SELECT COUNT(*)
+                            FROM submission_attempts a WHERE
+                            a.participant_service_id = participant_services.id
+                            AND a.kind = 'attack'), 0),
+                        defense_attempt_count = COALESCE((SELECT COUNT(*)
+                            FROM submission_attempts a WHERE
+                            a.participant_service_id = participant_services.id
+                            AND a.kind = 'defense'), 0),
+                        attack_best_raw = COALESCE((SELECT MAX(a.raw_score)
+                            FROM submission_attempts a WHERE
+                            a.participant_service_id = participant_services.id
+                            AND a.kind = 'attack'), 0),
+                        defense_best_raw = COALESCE((SELECT MAX(a.raw_score)
+                            FROM submission_attempts a WHERE
+                            a.participant_service_id = participant_services.id
+                            AND a.kind = 'defense'), 0),
+                        attack_penalty_attempts = COALESCE((SELECT COUNT(*)
+                            FROM submission_attempts a WHERE
+                            a.participant_service_id = participant_services.id
+                            AND a.kind = 'attack'
+                            AND a.penalty_eligible IS TRUE), 0),
+                        defense_penalty_attempts = COALESCE((SELECT COUNT(*)
+                            FROM submission_attempts a WHERE
+                            a.participant_service_id = participant_services.id
+                            AND a.kind = 'defense'
+                            AND a.penalty_eligible IS TRUE), 0),
+                        first_awarded_at = (SELECT MIN(a.created_at)
+                            FROM submission_attempts a WHERE
+                            a.participant_service_id = participant_services.id
+                            AND a.awarded_score > 0),
+                        last_awarded_at = (SELECT MAX(a.created_at)
+                            FROM submission_attempts a WHERE
+                            a.participant_service_id = participant_services.id
+                            AND a.awarded_score > 0)
+                    """
+                )
+            )
+
         service_columns = {
             column["name"] for column in schema.get_columns("services")
         }
@@ -498,3 +567,69 @@ def _migrate_existing_postgresql_schema() -> None:
                 "stdout_noise BOOLEAN NOT NULL DEFAULT FALSE"
             )
         )
+        participant_columns = {
+            "attack_attempt_count": "INTEGER NOT NULL DEFAULT 0",
+            "defense_attempt_count": "INTEGER NOT NULL DEFAULT 0",
+            "attack_best_raw": "INTEGER NOT NULL DEFAULT 0",
+            "defense_best_raw": "INTEGER NOT NULL DEFAULT 0",
+            "attack_penalty_attempts": "INTEGER NOT NULL DEFAULT 0",
+            "defense_penalty_attempts": "INTEGER NOT NULL DEFAULT 0",
+            "first_awarded_at": "TIMESTAMP WITH TIME ZONE",
+            "last_awarded_at": "TIMESTAMP WITH TIME ZONE",
+        }
+        participant_columns_changed = False
+        for name, column_type in participant_columns.items():
+            column_exists = connection.execute(
+                text(
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name = 'participant_services' AND column_name = :name"
+                ),
+                {"name": name},
+            ).scalar() is not None
+            connection.execute(
+                text(
+                    f"ALTER TABLE participant_services ADD COLUMN IF NOT EXISTS "
+                    f"{name} {column_type}"
+                )
+            )
+            participant_columns_changed = participant_columns_changed or not column_exists
+        if participant_columns_changed:
+            connection.execute(
+                text(
+                    """
+                UPDATE participant_services SET
+                    attack_attempt_count = COALESCE((SELECT COUNT(*)
+                        FROM submission_attempts a WHERE
+                        a.participant_service_id = participant_services.id
+                        AND a.kind = 'attack'), 0),
+                    defense_attempt_count = COALESCE((SELECT COUNT(*)
+                        FROM submission_attempts a WHERE
+                        a.participant_service_id = participant_services.id
+                        AND a.kind = 'defense'), 0),
+                    attack_best_raw = COALESCE((SELECT MAX(a.raw_score)
+                        FROM submission_attempts a WHERE
+                        a.participant_service_id = participant_services.id
+                        AND a.kind = 'attack'), 0),
+                    defense_best_raw = COALESCE((SELECT MAX(a.raw_score)
+                        FROM submission_attempts a WHERE
+                        a.participant_service_id = participant_services.id
+                        AND a.kind = 'defense'), 0),
+                    attack_penalty_attempts = COALESCE((SELECT COUNT(*)
+                        FROM submission_attempts a WHERE
+                        a.participant_service_id = participant_services.id
+                        AND a.kind = 'attack' AND a.penalty_eligible IS TRUE), 0),
+                    defense_penalty_attempts = COALESCE((SELECT COUNT(*)
+                        FROM submission_attempts a WHERE
+                        a.participant_service_id = participant_services.id
+                        AND a.kind = 'defense' AND a.penalty_eligible IS TRUE), 0),
+                    first_awarded_at = (SELECT MIN(a.created_at)
+                        FROM submission_attempts a WHERE
+                        a.participant_service_id = participant_services.id
+                        AND a.awarded_score > 0),
+                    last_awarded_at = (SELECT MAX(a.created_at)
+                        FROM submission_attempts a WHERE
+                        a.participant_service_id = participant_services.id
+                        AND a.awarded_score > 0)
+                    """
+                )
+            )

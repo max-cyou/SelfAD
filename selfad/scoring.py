@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from selfad.models import ParticipantService, ScoringSettings, SubmissionAttempt
@@ -12,6 +12,9 @@ DEFENSE = "defense"
 REWARD_MODES = {"coverage", "per_flag"}
 PENALTY_MODES = {"none", "points", "percent", "compound_percent"}
 STDOUT_NOISE_MODES = {"ignore", "unsuccessful", "percent_penalty"}
+# SubmissionAttempt rows are an audit tail; scoring and the scoreboard read
+# the denormalised counters on ParticipantService, so the tail can be pruned.
+MAX_ATTEMPT_HISTORY_PER_SERVICE = 50
 
 
 @dataclass(frozen=True)
@@ -77,30 +80,14 @@ def record_submission_score(
     stdout_noise: bool = False,
 ) -> ScoreDecision:
     current_score = player.attack_score if kind == ATTACK else player.defense_score
-    previous_attempts = session.scalar(
-        select(func.count())
-        .select_from(SubmissionAttempt)
-        .where(
-            SubmissionAttempt.participant_service_id == player.id,
-            SubmissionAttempt.kind == kind,
-        )
-    ) or 0
-    previous_best_raw = session.scalar(
-        select(func.max(SubmissionAttempt.raw_score)).where(
-            SubmissionAttempt.participant_service_id == player.id,
-            SubmissionAttempt.kind == kind,
-        )
-    ) or 0
-    previous_best_raw = max(previous_best_raw, current_score)
-    previous_penalty_attempts = session.scalar(
-        select(func.count())
-        .select_from(SubmissionAttempt)
-        .where(
-            SubmissionAttempt.participant_service_id == player.id,
-            SubmissionAttempt.kind == kind,
-            SubmissionAttempt.penalty_eligible.is_(True),
-        )
-    ) or 0
+    if kind == ATTACK:
+        previous_attempts = player.attack_attempt_count
+        previous_best_raw = max(player.attack_best_raw, current_score)
+        previous_penalty_attempts = player.attack_penalty_attempts
+    else:
+        previous_attempts = player.defense_attempt_count
+        previous_best_raw = max(player.defense_best_raw, current_score)
+        previous_penalty_attempts = player.defense_penalty_attempts
 
     stdout_noise_mode = getattr(settings, "stdout_noise_mode", "ignore")
     # Compatibility for databases created before the mode selector existed.
@@ -193,6 +180,37 @@ def record_submission_score(
             created_at=datetime.now(timezone.utc),
         )
     )
+    session.flush()
+    if kind == ATTACK:
+        player.attack_attempt_count = previous_attempts + 1
+        player.attack_best_raw = max(previous_best_raw, raw_score)
+        player.attack_penalty_attempts = (
+            previous_penalty_attempts + int(penalty_eligible)
+        )
+    else:
+        player.defense_attempt_count = previous_attempts + 1
+        player.defense_best_raw = max(previous_best_raw, raw_score)
+        player.defense_penalty_attempts = (
+            previous_penalty_attempts + int(penalty_eligible)
+        )
+    if awarded_score > 0:
+        now = datetime.now(timezone.utc)
+        if player.first_awarded_at is None:
+            player.first_awarded_at = now
+        player.last_awarded_at = now
+    kept_attempt_ids = session.scalars(
+        select(SubmissionAttempt.id)
+        .where(SubmissionAttempt.participant_service_id == player.id)
+        .order_by(SubmissionAttempt.id.desc())
+        .limit(MAX_ATTEMPT_HISTORY_PER_SERVICE)
+    ).all()
+    if kept_attempt_ids:
+        session.execute(
+            delete(SubmissionAttempt).where(
+                SubmissionAttempt.participant_service_id == player.id,
+                SubmissionAttempt.id.not_in(kept_attempt_ids),
+            )
+        )
     return ScoreDecision(
         raw_score=raw_score,
         awarded_score=awarded_score,

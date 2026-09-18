@@ -573,7 +573,10 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
                 player.defense_message = (
                     "Defense check passed: jury exploit recovered no flags."
                     if matched == 0
-                    else runtime.message
+                    else (
+                        "Defense check failed: the jury exploit recovered "
+                        f"{matched} of {runtime.injected_flags} flags."
+                    )
                 )
                 player.defense_message = (
                     f"{player.defense_message} {scoring_message}"
