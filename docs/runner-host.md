@@ -9,7 +9,7 @@ data, SSH credentials or unrelated services on it.
 On an offline admin machine or the control-plane host, create a fresh bundle:
 
 ```bash
-./scripts/runner-init-tls.sh /srv/selfad/runner-1-tls runner-1.internal selfad-control
+./scripts/event/runner-init-tls.sh /srv/selfad/runner-1-tls runner-1.internal selfad-control
 ```
 
 The command creates these separate directories:
@@ -63,7 +63,7 @@ equivalent cloud/nftables firewall rule.
 
 ```bash
 SELFAD_RUNNER_FIREWALL_CONFIRMED=true \
-  sudo ./scripts/runner-install.sh /path/to/runner 2.26.125.223
+  sudo ./scripts/event/runner-install.sh /path/to/runner 2.26.125.223
 ```
 
 Use `SELFAD_RUNNER_FIREWALL_CONFIRMED=true` only after configuring an external

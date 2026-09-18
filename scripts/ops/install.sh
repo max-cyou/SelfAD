@@ -3,7 +3,7 @@
 # Start a local SelfAD instance with its isolated Docker runner.
 set -eu
 
-project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 env_file="$project_dir/.env"
 host=""
 
@@ -75,7 +75,7 @@ for attempt in $(seq 1 45); do
 done
 
 if [ "${health:-}" != "healthy" ]; then
-    printf '%s\n' "SelfAD did not become healthy. Run ./scripts/doctor.sh for details." >&2
+    printf '%s\n' "SelfAD did not become healthy. Run ./scripts/ops/doctor.sh for details." >&2
     exit 1
 fi
 

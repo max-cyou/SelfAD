@@ -7,7 +7,7 @@ PROJECT_DIR = Path(__file__).resolve().parents[1]
 
 class RunnerTlsScriptTests(unittest.TestCase):
     def test_tls_script_generates_separate_runner_and_client_bundles(self):
-        script = (PROJECT_DIR / "scripts" / "runner-init-tls.sh").read_text(
+        script = (PROJECT_DIR / "scripts" / "event" / "runner-init-tls.sh").read_text(
             encoding="utf-8"
         )
         self.assertIn('"$output_dir/runner"', script)

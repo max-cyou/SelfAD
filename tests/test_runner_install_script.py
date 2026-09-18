@@ -7,7 +7,7 @@ PROJECT_DIR = Path(__file__).resolve().parents[1]
 
 class RunnerInstallScriptTests(unittest.TestCase):
     def test_installer_requires_tls_firewall_and_fresh_host(self):
-        script = (PROJECT_DIR / "scripts" / "runner-install.sh").read_text(
+        script = (PROJECT_DIR / "scripts" / "event" / "runner-install.sh").read_text(
             encoding="utf-8"
         )
         self.assertIn("docker ps -aq", script)

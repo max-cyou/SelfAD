@@ -3,7 +3,7 @@
 # Show the state of the local Compose installation and run the readiness check.
 set -eu
 
-project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$project_dir"
 
 command -v docker >/dev/null 2>&1 || {
@@ -18,7 +18,7 @@ docker compose version >/dev/null 2>&1 || {
 docker compose ps
 container_id=$(docker compose ps -q selfad)
 if [ -z "$container_id" ]; then
-    printf '%s\n' "SelfAD is not running. Start it with ./scripts/install.sh." >&2
+    printf '%s\n' "SelfAD is not running. Start it with ./scripts/ops/install.sh." >&2
     exit 1
 fi
 

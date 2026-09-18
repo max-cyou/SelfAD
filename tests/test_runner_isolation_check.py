@@ -8,7 +8,7 @@ PROJECT_DIR = Path(__file__).resolve().parents[1]
 class RunnerIsolationCheckTests(unittest.TestCase):
     def test_check_exercises_internal_network_and_runtime_limits(self):
         script = (
-            PROJECT_DIR / "scripts" / "runner-isolation-check.sh"
+            PROJECT_DIR / "scripts" / "event" / "runner-isolation-check.sh"
         ).read_text(encoding="utf-8")
         self.assertIn("network create --internal", script)
         self.assertIn("--memory 256m", script)

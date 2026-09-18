@@ -106,14 +106,14 @@ plane volumes or host Docker sockets.
 1. Stop the control plane, then create and test a backup of `selfad-data`:
 
    ```bash
-   ./scripts/backup-volume.sh selfad-data /srv/backups/selfad
+   ./scripts/ops/backup-volume.sh selfad-data /srv/backups/selfad
    ```
 
    Keep the archive off the control-plane host as well. Restore only onto a
    fresh volume after testing the archive in an isolated environment:
 
    ```bash
-   ./scripts/restore-volume.sh /srv/backups/selfad/selfad-data-YYYYMMDDTHHMMSSZ.tar.gz selfad-data-restore-test
+   ./scripts/ops/restore-volume.sh /srv/backups/selfad/selfad-data-YYYYMMDDTHHMMSSZ.tar.gz selfad-data-restore-test
    ```
 
    The restore script refuses to overwrite an existing volume. Start a
@@ -124,7 +124,7 @@ plane volumes or host Docker sockets.
 
    ```bash
    SELFAD_METRICS_TOKEN='your-metrics-token' \
-     ./scripts/event-preflight.sh https://ctf.example
+     ./scripts/event/event-preflight.sh https://ctf.example
    ```
 3. Push and check a known vulnerable service, an exploit and a one-line fix
    through the real participant path.

@@ -8,7 +8,7 @@ if [ "$#" -ne 1 ]; then
     exit 64
 fi
 
-project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 backup_dir=$1
 cd "$project_dir"
 
@@ -23,4 +23,4 @@ if [ -z "$volume_name" ]; then
     exit 1
 fi
 
-exec "$project_dir/scripts/backup-volume.sh" "$volume_name" "$backup_dir"
+exec "$project_dir/scripts/ops/backup-volume.sh" "$volume_name" "$backup_dir"

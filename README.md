@@ -10,7 +10,7 @@ local Gitea and an isolated Docker runner, then waits until all three are ready.
 ```bash
 git clone https://github.com/max-cyou/SelfAD.git
 cd SelfAD
-./scripts/install.sh
+./scripts/ops/install.sh
 ```
 
 Open `http://localhost:8000` and complete the setup form. The organiser's
@@ -21,16 +21,17 @@ To let devices on the LAN clone repositories with the correct address, install
 with the host's LAN address:
 
 ```bash
-./scripts/install.sh --host 192.168.1.154
+./scripts/ops/install.sh --host 192.168.1.154
 ```
 
 Useful commands:
 
 ```bash
-./scripts/doctor.sh                  # check panel, Gitea and runner
-./scripts/update.sh                  # rebuild after a git pull
-./scripts/backup.sh /path/to/backups # archive SelfAD data
-docker compose down                  # stop without deleting data
+./scripts/ops/doctor.sh                  # check panel, Gitea and runner
+./scripts/ops/update.sh                  # rebuild after a git pull
+./scripts/ops/backup.sh /path/to/backups # archive SelfAD data
+./scripts/ops/reset.sh                   # delete all data and start fresh
+docker compose down                      # stop without deleting data
 ```
 
 ## Domain and HTTPS
