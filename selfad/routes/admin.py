@@ -35,6 +35,7 @@ from selfad.gitea import (
     delete_user_ssh_key,
     ensure_repository_webhook,
     create_gitea_user,
+    gitea_username_exists,
     add_user_ssh_key,
     provision_service,
     update_gitea_user,
@@ -1008,14 +1009,38 @@ async def create_participant(
         errors["username"] = "This participant already exists."
     if session.scalar(select(User.id).where(User.email == values["email"])):
         errors["email"] = "This email is already in use."
+    settings = get_gitea_settings()
+    if not errors:
+        try:
+            taken_in_gitea = await run_in_threadpool(
+                gitea_username_exists,
+                settings,
+                username=values["username"],
+            )
+        except GiteaUnavailable as error:
+            return render_admin(request, session, get_session_user(request, session), participant_errors={"_form": str(error)}, participant_form=values, active_section="users", status_code=502)
+        if taken_in_gitea:
+            errors["username"] = "This username is already in use."
     if errors:
         return render_admin(request, session, get_session_user(request, session), participant_errors=errors, participant_form=values, active_section="users", status_code=422)
 
-    settings = get_gitea_settings()
+    gitea_user = None
     try:
         gitea_user = await run_in_threadpool(create_gitea_user, settings, username=values["username"], email=values["email"], password=password)
         ssh_key_id = await run_in_threadpool(add_user_ssh_key, settings, username=gitea_user.username, public_key=values["ssh_public_key"])
-    except (GiteaConflict, GiteaUnavailable) as error:
+    except GiteaConflict as error:
+        if gitea_user is not None:
+            try:
+                await run_in_threadpool(delete_gitea_user, settings, username=gitea_user.username)
+            except GiteaError:
+                pass
+        return render_admin(request, session, get_session_user(request, session), participant_errors={"username" if gitea_user is None else "ssh_public_key": str(error)}, participant_form=values, active_section="users", status_code=422)
+    except GiteaUnavailable as error:
+        if gitea_user is not None:
+            try:
+                await run_in_threadpool(delete_gitea_user, settings, username=gitea_user.username)
+            except GiteaError:
+                pass
         return render_admin(request, session, get_session_user(request, session), participant_errors={"_form": str(error)}, participant_form=values, active_section="users", status_code=502)
 
     participant = User(username=values["username"], email=values["email"], password_hash=hash_password(password), is_admin=values["role"] == "admin", ssh_public_key=values["ssh_public_key"], git_ssh_key_id=ssh_key_id, gitea_user_id=gitea_user.id, gitea_username=gitea_user.username)

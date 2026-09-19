@@ -25,6 +25,7 @@ from selfad.gitea import (
     add_user_ssh_key,
     create_gitea_user,
     delete_gitea_user,
+    gitea_username_exists,
 )
 from selfad.models import (
     InstanceConfig,
@@ -392,6 +393,26 @@ async def register(
         errors["username"] = "This username is already in use."
     if session.scalar(select(User.id).where(User.email == values["email"])):
         errors["email"] = "This email is already in use."
+    settings = get_gitea_settings()
+    if not errors:
+        try:
+            taken_in_gitea = await run_in_threadpool(
+                gitea_username_exists,
+                settings,
+                username=values["username"],
+            )
+        except GiteaUnavailable as error:
+            return render_registration(
+                request,
+                session,
+                registration_errors={"_form": str(error)},
+                registration_form=values,
+                status_code=502,
+            )
+        if taken_in_gitea:
+            # Covers reserved Gitea accounts (root, the organiser) that have
+            # no SelfAD row and therefore pass the local uniqueness checks.
+            errors["username"] = "This username is already in use."
     if errors:
         return render_registration(
             request,
@@ -401,7 +422,6 @@ async def register(
             status_code=422,
         )
 
-    settings = get_gitea_settings()
     gitea_user = None
     try:
         gitea_user = await run_in_threadpool(
@@ -427,13 +447,15 @@ async def register(
                 )
             except GiteaError:
                 pass
-        # A conflict means Gitea rejected the input itself (malformed SSH
-        # key, already used key): that is a form error, not a gateway failure.
+        # A conflict means Gitea rejected the input itself (username taken,
+        # malformed SSH key): that is a form error, not a gateway failure.
         return render_registration(
             request,
             session,
             registration_errors={
-                "_form" if gitea_user is None else "ssh_public_key": str(error)
+                "username" if gitea_user is None else "ssh_public_key": str(
+                    error
+                )
             },
             registration_form=values,
             status_code=422,
