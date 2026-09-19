@@ -417,7 +417,28 @@ async def register(
             username=gitea_user.username,
             public_key=values["ssh_public_key"],
         )
-    except (GiteaConflict, GiteaUnavailable) as error:
+    except GiteaConflict as error:
+        if gitea_user is not None:
+            try:
+                await run_in_threadpool(
+                    delete_gitea_user,
+                    settings,
+                    username=gitea_user.username,
+                )
+            except GiteaError:
+                pass
+        # A conflict means Gitea rejected the input itself (malformed SSH
+        # key, already used key): that is a form error, not a gateway failure.
+        return render_registration(
+            request,
+            session,
+            registration_errors={
+                "_form" if gitea_user is None else "ssh_public_key": str(error)
+            },
+            registration_form=values,
+            status_code=422,
+        )
+    except GiteaUnavailable as error:
         if gitea_user is not None:
             try:
                 await run_in_threadpool(
