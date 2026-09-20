@@ -363,7 +363,7 @@ def gitea_username_exists(settings: GiteaSettings, *, username: str) -> bool:
         _request(
             settings,
             "GET",
-            f"/admin/users/{quote(username, safe='')}",
+            f"/users/{quote(username, safe='')}",
         )
     except _GiteaRequestError as error:
         if error.status_code == 404:
