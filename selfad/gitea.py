@@ -356,6 +356,9 @@ def create_gitea_user(
         raise GiteaUnavailable("Gitea could not create the participant.") from error
     user_id = response.get("id") if isinstance(response, dict) else None
     returned_username = response.get("login") if isinstance(response, dict) else None
+    if not isinstance(user_id, int) or not isinstance(returned_username, str):
+        raise GiteaUnavailable("Gitea returned an invalid user response.")
+    return GiteaUser(user_id, returned_username)
 
 
 def gitea_username_exists(settings: GiteaSettings, *, username: str) -> bool:
@@ -372,9 +375,6 @@ def gitea_username_exists(settings: GiteaSettings, *, username: str) -> bool:
             raise GiteaUnavailable("Gitea rejected the configured token.") from error
         raise GiteaUnavailable("Gitea could not check the username.") from error
     return True
-    if not isinstance(user_id, int) or not isinstance(returned_username, str):
-        raise GiteaUnavailable("Gitea returned an invalid user response.")
-    return GiteaUser(user_id, returned_username)
 
 
 def get_authenticated_user(settings: GiteaSettings) -> GiteaUser:
