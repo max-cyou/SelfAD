@@ -38,6 +38,7 @@ from selfad.gitea import (
     gitea_username_exists,
     add_user_ssh_key,
     provision_service,
+    replace_repository_file,
     update_gitea_user,
 )
 from selfad.models import (
@@ -62,6 +63,7 @@ from selfad.scoring import (
     get_scoring_settings,
 )
 from selfad.security import hash_password
+from selfad.repository_readmes import issued_service_readme
 from selfad.service_contract import (
     ServiceContractResult,
     validate_service_contract,
@@ -971,6 +973,24 @@ async def issue_participant_repositories(
             return render_admin(request, session, user, service_errors={"_form": str(error)}, active_section="services", status_code=502)
         session.add(issued)
         session.commit()
+    if service.container_port is None or not service.repository_path:
+        return render_admin(request, session, user, service_errors={"_form": "Validated service runtime metadata is unavailable."}, active_section="services", status_code=502)
+    try:
+        await run_in_threadpool(
+            replace_repository_file,
+            settings,
+            service.repository_path,
+            "README.md",
+            content=issued_service_readme(
+                service.name,
+                service.slug,
+                service.container_port,
+            ),
+            branch=service.default_branch,
+            message="Replace author guide with local run instructions",
+        )
+    except (GiteaConflict, GiteaUnavailable, GiteaError) as error:
+        return render_admin(request, session, user, service_errors={"_form": str(error)}, active_section="services", status_code=502)
     return RedirectResponse(url="/admin#services", status_code=303)
 
 

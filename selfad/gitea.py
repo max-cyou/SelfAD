@@ -584,6 +584,60 @@ def create_repository_file(
         raise GiteaUnavailable("Gitea could not seed the repository.") from error
 
 
+def replace_repository_file(
+    settings: GiteaSettings,
+    repository_path: str,
+    file_path: str,
+    *,
+    content: bytes,
+    branch: str,
+    message: str,
+) -> None:
+    try:
+        owner, name = repository_path.split("/", 1)
+    except ValueError as error:
+        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
+    encoded_file_path = "/".join(
+        quote(part, safe="") for part in file_path.split("/")
+    )
+    path = (
+        f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
+        f"/contents/{encoded_file_path}"
+    )
+    try:
+        existing = _request(
+            settings,
+            "GET",
+            f"{path}?ref={quote(branch, safe='')}",
+        )
+    except _GiteaRequestError as error:
+        if error.status_code != 404:
+            raise GiteaUnavailable("Gitea could not inspect the repository file.") from error
+        existing = None
+
+    payload: dict[str, object] = {
+        "branch": branch,
+        "message": message,
+        "content": base64.b64encode(content).decode("ascii"),
+    }
+    method = "POST"
+    if isinstance(existing, dict):
+        sha = existing.get("sha")
+        if not isinstance(sha, str) or not sha:
+            raise GiteaUnavailable("Gitea returned invalid repository file metadata.")
+        payload["sha"] = sha
+        method = "PUT"
+
+    try:
+        _request(settings, method, path, payload)
+    except _GiteaRequestError as error:
+        if error.status_code in {409, 422}:
+            raise GiteaConflict("Gitea rejected the repository file update.") from error
+        if error.status_code in {401, 403}:
+            raise GiteaUnavailable("Gitea cannot update the repository file.") from error
+        raise GiteaUnavailable("Gitea could not update the repository file.") from error
+
+
 def list_repository_files(
     settings: GiteaSettings,
     repository_path: str,

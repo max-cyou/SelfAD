@@ -10,7 +10,7 @@ from selfad.gitea import (
     list_repository_files,
 )
 from selfad.models import ParticipantService, Service, User
-from selfad.repository_readmes import attack_readme, defense_readme
+from selfad.repository_readmes import attack_readme
 from selfad.settings import GiteaSettings
 
 
@@ -74,32 +74,9 @@ def provision_participant_service(
             ("Dockerfile", ATTACK_DOCKERFILE),
             ("exploit.py", ATTACK_EXPLOIT),
         ]
-        if "README.txt" in source_files:
-            participant_notes = get_repository_file(
-                settings,
-                service.repository_path,
-                "README.txt",
-                ref=service.runtime_source_commit,
-                max_bytes=256 * 1024,
-            )
-            if participant_notes is not None:
-                attack_files.append(("README.txt", participant_notes))
         for path, content in attack_files:
             create_repository_file(settings, attack.path, path, content=content, branch=service.default_branch, message="Initialize SelfAD attack repository")
 
-        create_repository_file(
-            settings,
-            defense.path,
-            "README.md",
-            content=defense_readme(
-                service.name,
-                service.default_branch,
-                service.slug,
-                service_port,
-            ),
-            branch=service.default_branch,
-            message="Add defense instructions",
-        )
         for path in source_files:
             if path == "README.md":
                 continue

@@ -2,8 +2,7 @@ import unittest
 
 from selfad.repository_readmes import (
     attack_readme,
-    defense_readme,
-    organizer_readme,
+    issued_service_readme,
 )
 
 
@@ -21,21 +20,12 @@ class ParticipantReadmeTests(unittest.TestCase):
         self.assertIn("`requests==2.32.5`", readme)
         self.assertIn("`beautifulsoup4==4.14.3`", readme)
         self.assertIn("You may add your own pinned packages", readme)
-        self.assertIn("README.txt", readme)
-
-    def test_defense_readme_has_two_command_local_start(self):
-        readme = defense_readme("Notes", "main", "notes", 8080).decode()
+    def test_issued_service_readme_only_explains_local_start(self):
+        readme = issued_service_readme("Notes", "notes", 8080).decode()
 
         self.assertIn("docker build -t selfad-notes .", readme)
         self.assertIn("docker run --rm -p 8080:8080 selfad-notes", readme)
-        self.assertIn("replaces the source repository's README", readme)
-        self.assertIn("README.txt", readme)
-
-    def test_organizer_is_told_where_to_put_participant_notes(self):
-        readme = organizer_readme("Notes", "main").decode()
-
-        self.assertIn("README.txt", readme)
-        self.assertIn("copied unchanged", readme)
+        self.assertNotIn("defense", readme.lower())
 
 
 if __name__ == "__main__":
