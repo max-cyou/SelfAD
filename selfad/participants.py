@@ -35,6 +35,8 @@ def provision_participant_service(
     *,
     service: Service,
     user: User,
+    attack_requirements: str,
+    allow_user_attack_requirements: bool,
     webhook_secret: str,
 ) -> ParticipantService:
     if (
@@ -50,29 +52,51 @@ def provision_participant_service(
     attack = create_repository(settings, path=attack_name, description=f"SelfAD attack repository for {service.name}.", default_branch=service.default_branch)
     defense = create_repository(settings, path=defense_name, description=f"SelfAD defense repository for {service.name}.", default_branch=service.default_branch)
     try:
-        attack_files = (
-            ("README.md", attack_readme(service.name, service.default_branch)),
+        service_port = service.container_port
+        if service_port is None:
+            raise GiteaError("Validated service port is unavailable.")
+        source_files = list_repository_files(
+            settings,
+            service.repository_path,
+            ref=service.runtime_source_commit,
+        )
+        attack_files = [
+            (
+                "README.md",
+                attack_readme(
+                    service.name,
+                    service.default_branch,
+                    service_port,
+                    attack_requirements,
+                    allow_user_attack_requirements,
+                ),
+            ),
             ("Dockerfile", ATTACK_DOCKERFILE),
             ("exploit.py", ATTACK_EXPLOIT),
-        )
-        for path, content in attack_files:
-            create_repository_file(settings, attack.path, path, content=content, branch=service.default_branch, message="Initialize SelfAD attack repository")
-
-        source_files = list_repository_files(settings, service.repository_path, ref=service.runtime_source_commit)
-        original_readme = None
-        if "README.md" in source_files:
-            original_readme = get_repository_file(
+        ]
+        if "README.txt" in source_files:
+            participant_notes = get_repository_file(
                 settings,
                 service.repository_path,
-                "README.md",
+                "README.txt",
                 ref=service.runtime_source_commit,
                 max_bytes=256 * 1024,
             )
+            if participant_notes is not None:
+                attack_files.append(("README.txt", participant_notes))
+        for path, content in attack_files:
+            create_repository_file(settings, attack.path, path, content=content, branch=service.default_branch, message="Initialize SelfAD attack repository")
+
         create_repository_file(
             settings,
             defense.path,
             "README.md",
-            content=defense_readme(service.name, service.default_branch, original_readme),
+            content=defense_readme(
+                service.name,
+                service.default_branch,
+                service.slug,
+                service_port,
+            ),
             branch=service.default_branch,
             message="Add defense instructions",
         )

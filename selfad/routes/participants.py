@@ -38,6 +38,7 @@ from selfad.models import (
 )
 from selfad.participants import provision_participant_service
 from selfad.rate_limit import client_key, rate_limiter
+from selfad.scoring import get_scoring_settings
 from selfad.security import hash_password, verify_password
 from selfad.settings import (
     get_gitea_settings,
@@ -519,6 +520,7 @@ async def register(
             Service.runtime_status == ServiceRunStatus.PASSED,
         )
     ).all()
+    scoring = get_scoring_settings(session)
     for service in active_services:
         try:
             assignment = await run_in_threadpool(
@@ -526,6 +528,10 @@ async def register(
                 settings,
                 service=service,
                 user=user,
+                attack_requirements=scoring.attack_requirements,
+                allow_user_attack_requirements=(
+                    scoring.allow_user_attack_requirements
+                ),
                 webhook_secret=get_gitea_webhook_secret(),
             )
         except GiteaError:

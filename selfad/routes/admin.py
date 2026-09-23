@@ -951,11 +951,22 @@ async def issue_participant_repositories(
     ).all()
     existing_user_ids = set(session.scalars(select(ParticipantService.user_id).where(ParticipantService.service_id == service.id)).all())
     settings = get_gitea_settings()
+    scoring = get_scoring_settings(session)
     for participant in participants:
         if participant.id in existing_user_ids:
             continue
         try:
-            issued = await run_in_threadpool(provision_participant_service, settings, service=service, user=participant, webhook_secret=get_gitea_webhook_secret())
+            issued = await run_in_threadpool(
+                provision_participant_service,
+                settings,
+                service=service,
+                user=participant,
+                attack_requirements=scoring.attack_requirements,
+                allow_user_attack_requirements=(
+                    scoring.allow_user_attack_requirements
+                ),
+                webhook_secret=get_gitea_webhook_secret(),
+            )
         except (GiteaConflict, GiteaUnavailable, GiteaError) as error:
             return render_admin(request, session, user, service_errors={"_form": str(error)}, active_section="services", status_code=502)
         session.add(issued)
