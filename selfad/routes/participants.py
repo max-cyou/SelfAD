@@ -291,7 +291,10 @@ def validate_registration(
     if password != password_confirm:
         errors["password_confirm"] = "Passwords do not match."
     key = values["ssh_public_key"]
-    if not key.startswith(("ssh-", "ecdsa-", "sk-ssh-", "sk-ecdsa-")):
+    if key and (
+        len(key) > 2048
+        or not key.startswith(("ssh-", "ecdsa-", "sk-ssh-", "sk-ecdsa-"))
+    ):
         errors["ssh_public_key"] = "Enter a valid SSH public key."
     return errors
 
@@ -423,6 +426,7 @@ async def register(
         )
 
     gitea_user = None
+    ssh_key_id = None
     try:
         gitea_user = await run_in_threadpool(
             create_gitea_user,
@@ -431,12 +435,13 @@ async def register(
             email=values["email"],
             password=password,
         )
-        ssh_key_id = await run_in_threadpool(
-            add_user_ssh_key,
-            settings,
-            username=gitea_user.username,
-            public_key=values["ssh_public_key"],
-        )
+        if values["ssh_public_key"]:
+            ssh_key_id = await run_in_threadpool(
+                add_user_ssh_key,
+                settings,
+                username=gitea_user.username,
+                public_key=values["ssh_public_key"],
+            )
     except GiteaConflict as error:
         if gitea_user is not None:
             try:

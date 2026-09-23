@@ -48,9 +48,9 @@
               </div>
             {% endif %}
             <div class="field registration-key{% if registration_errors.get('ssh_public_key') %} field--error{% endif %}">
-              <label for="register-key">SSH public key</label>
-              <textarea id="register-key" name="ssh_public_key" rows="3" maxlength="2048" placeholder="ssh-ed25519 AAAA..." spellcheck="false" required>{{ registration_form.ssh_public_key }}</textarea>
-              <small>{{ registration_errors.get('ssh_public_key') or 'Only your public key. It is used for Git push access.' }}</small>
+              <label for="register-key">SSH public key <span class="field-optional">(optional)</span></label>
+              <textarea id="register-key" name="ssh_public_key" rows="3" maxlength="2048" placeholder="ssh-ed25519 AAAA..." spellcheck="false">{{ registration_form.ssh_public_key }}</textarea>
+              <small>{{ registration_errors.get('ssh_public_key') or 'Optional, but required for Git over SSH. You can add it later in Gitea; paste only the public key.' }}</small>
             </div>
             <div class="registration-actions">
               <button type="submit">Create account</button>
