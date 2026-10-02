@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -18,17 +19,26 @@ from selfad.gitea import (
     gitea_username_exists,
     update_gitea_user,
 )
-from selfad.models import ParticipantService, User
+from selfad.models import (
+    ParticipantService,
+    Service,
+    ServiceRunStatus,
+    ServiceStatus,
+    User,
+)
+from selfad.participants import provision_participant_service
 from selfad.routes.admin_shared import (
     _users_admin_url,
     get_admin_access,
     render_admin,
     validate_participant_form,
 )
+from selfad.scoring import get_scoring_settings
 from selfad.security import hash_password
 from selfad.settings import (
     get_gitea_root_password,
     get_gitea_settings,
+    get_gitea_webhook_secret,
     set_gitea_root_password,
 )
 
@@ -63,7 +73,7 @@ async def create_participant(
     request: Request,
     session: Session = Depends(get_session),
 ):
-    _, redirect = get_admin_access(request, session)
+    current_user, redirect = get_admin_access(request, session)
     if redirect:
         return redirect
     form = await request.form()
@@ -90,34 +100,142 @@ async def create_participant(
                 username=values["username"],
             )
         except GiteaUnavailable as error:
-            return render_admin(request, session, get_session_user(request, session), participant_errors={"_form": str(error)}, participant_form=values, active_section="users", status_code=502)
+            return render_admin(
+                request,
+                session,
+                get_session_user(request, session),
+                participant_errors={"_form": str(error)},
+                participant_form=values,
+                active_section="users",
+                status_code=502,
+            )
         if taken_in_gitea:
             errors["username"] = "This username is already in use."
     if errors:
-        return render_admin(request, session, get_session_user(request, session), participant_errors=errors, participant_form=values, active_section="users", status_code=422)
+        return render_admin(
+            request,
+            session,
+            get_session_user(request, session),
+            participant_errors=errors,
+            participant_form=values,
+            active_section="users",
+            status_code=422,
+        )
 
     gitea_user = None
     try:
-        gitea_user = await run_in_threadpool(create_gitea_user, settings, username=values["username"], email=values["email"], password=password)
-        ssh_key_id = await run_in_threadpool(add_user_ssh_key, settings, username=gitea_user.username, public_key=values["ssh_public_key"])
+        gitea_user = await run_in_threadpool(
+            create_gitea_user,
+            settings,
+            username=values["username"],
+            email=values["email"],
+            password=password,
+        )
+        ssh_key_id = await run_in_threadpool(
+            add_user_ssh_key,
+            settings,
+            username=gitea_user.username,
+            public_key=values["ssh_public_key"],
+        )
     except GiteaConflict as error:
         if gitea_user is not None:
             try:
                 await run_in_threadpool(delete_gitea_user, settings, username=gitea_user.username)
             except GiteaError:
                 pass
-        return render_admin(request, session, get_session_user(request, session), participant_errors={"username" if gitea_user is None else "ssh_public_key": str(error)}, participant_form=values, active_section="users", status_code=422)
+        return render_admin(
+            request,
+            session,
+            get_session_user(request, session),
+            participant_errors={"username" if gitea_user is None else "ssh_public_key": str(error)},
+            participant_form=values,
+            active_section="users",
+            status_code=422,
+        )
     except GiteaUnavailable as error:
         if gitea_user is not None:
             try:
                 await run_in_threadpool(delete_gitea_user, settings, username=gitea_user.username)
             except GiteaError:
                 pass
-        return render_admin(request, session, get_session_user(request, session), participant_errors={"_form": str(error)}, participant_form=values, active_section="users", status_code=502)
+        return render_admin(
+            request,
+            session,
+            get_session_user(request, session),
+            participant_errors={"_form": str(error)},
+            participant_form=values,
+            active_section="users",
+            status_code=502,
+        )
 
-    participant = User(username=values["username"], email=values["email"], password_hash=hash_password(password), is_admin=values["role"] == "admin", ssh_public_key=values["ssh_public_key"], git_ssh_key_id=ssh_key_id, gitea_user_id=gitea_user.id, gitea_username=gitea_user.username)
-    session.add(participant)
-    session.commit()
+    participant = User(
+        username=values["username"],
+        email=values["email"],
+        password_hash=hash_password(password),
+        is_admin=values["role"] == "admin",
+        ssh_public_key=values["ssh_public_key"],
+        git_ssh_key_id=ssh_key_id,
+        gitea_user_id=gitea_user.id,
+        gitea_username=gitea_user.username,
+    )
+    assignments: list[ParticipantService] = []
+    try:
+        session.add(participant)
+        session.flush()
+        active_services = session.scalars(
+            select(Service)
+            .where(
+                Service.status == ServiceStatus.ACTIVE,
+                Service.runtime_status == ServiceRunStatus.PASSED,
+            )
+            .order_by(Service.id)
+        ).all()
+        scoring = get_scoring_settings(session)
+        for service in active_services:
+            assignment = await run_in_threadpool(
+                provision_participant_service,
+                settings,
+                service=service,
+                user=participant,
+                attack_requirements=scoring.attack_requirements,
+                allow_user_attack_requirements=scoring.allow_user_attack_requirements,
+                webhook_secret=get_gitea_webhook_secret(),
+            )
+            assignments.append(assignment)
+            session.add(assignment)
+        session.commit()
+    except (GiteaError, IntegrityError) as error:
+        session.rollback()
+        for assignment in reversed(assignments):
+            for repository_path in (
+                assignment.defense_repository_path,
+                assignment.attack_repository_path,
+            ):
+                try:
+                    await run_in_threadpool(
+                        delete_repository,
+                        settings,
+                        repository_path,
+                    )
+                except GiteaError:
+                    pass
+        try:
+            await run_in_threadpool(
+                delete_gitea_user,
+                settings,
+                username=gitea_user.username,
+            )
+        except GiteaError:
+            pass
+        return render_admin(
+            request,
+            session,
+            current_user,
+            participant_errors={"_form": str(error)},
+            participant_form=values,
+            active_section="users",
+            status_code=502 if isinstance(error, GiteaError) else 409,
+        )
     return RedirectResponse(url=_users_admin_url(request), status_code=303)
 
 

@@ -5,6 +5,7 @@ from selfad.gitea import (
     add_repository_collaborator,
     create_repository,
     create_repository_file,
+    delete_repository,
     ensure_repository_webhook,
     get_repository_file,
     list_repository_files,
@@ -14,7 +15,7 @@ from selfad.repository_readmes import attack_readme
 from selfad.settings import GiteaSettings
 
 ATTACK_DOCKERFILE = b'FROM python:3.13-alpine\nWORKDIR /workspace\nCMD ["python", "exploit.py"]\n'
-ATTACK_EXPLOIT = b'''import os
+ATTACK_EXPLOIT = b"""import os
 import sys
 
 # SELFAD_TARGET is a complete in-network URL, e.g. http://target:8080.
@@ -26,7 +27,7 @@ target = target.rstrip("/")
 # response = requests.get(f"{target}/your-endpoint", timeout=5)
 
 # Print only recovered flags: one exact 32-character A-Z/0-9 flag per line.
-'''
+"""
 
 
 def provision_participant_service(
@@ -48,9 +49,21 @@ def provision_participant_service(
 
     attack_name = f"{service.slug}-{user.username}-attack"
     defense_name = f"{service.slug}-{user.username}-defense"
-    attack = create_repository(settings, path=attack_name, description=f"SelfAD attack repository for {service.name}.", default_branch=service.default_branch)
-    defense = create_repository(settings, path=defense_name, description=f"SelfAD defense repository for {service.name}.", default_branch=service.default_branch)
+    attack = None
+    defense = None
     try:
+        attack = create_repository(
+            settings,
+            path=attack_name,
+            description=f"SelfAD attack repository for {service.name}.",
+            default_branch=service.default_branch,
+        )
+        defense = create_repository(
+            settings,
+            path=defense_name,
+            description=f"SelfAD defense repository for {service.name}.",
+            default_branch=service.default_branch,
+        )
         service_port = service.container_port
         if service_port is None:
             raise GiteaError("Validated service port is unavailable.")
@@ -74,26 +87,66 @@ def provision_participant_service(
             ("exploit.py", ATTACK_EXPLOIT),
         ]
         for path, content in attack_files:
-            create_repository_file(settings, attack.path, path, content=content, branch=service.default_branch, message="Initialize SelfAD attack repository")
+            create_repository_file(
+                settings,
+                attack.path,
+                path,
+                content=content,
+                branch=service.default_branch,
+                message="Initialize SelfAD attack repository",
+            )
 
         for path in source_files:
             if path == "README.md":
                 continue
-            content = get_repository_file(settings, service.repository_path, path, ref=service.runtime_source_commit, max_bytes=256 * 1024)
+            content = get_repository_file(
+                settings,
+                service.repository_path,
+                path,
+                ref=service.runtime_source_commit,
+                max_bytes=256 * 1024,
+            )
             if content is None:
                 raise GiteaError(f"Could not copy {path} into the defense repository.")
-            create_repository_file(settings, defense.path, path, content=content, branch=service.default_branch, message="Initialize SelfAD defense repository")
+            create_repository_file(
+                settings,
+                defense.path,
+                path,
+                content=content,
+                branch=service.default_branch,
+                message="Initialize SelfAD defense repository",
+            )
 
-        source_dockerfile = get_repository_file(settings, service.repository_path, "Dockerfile", ref=service.runtime_source_commit)
+        source_dockerfile = get_repository_file(
+            settings, service.repository_path, "Dockerfile", ref=service.runtime_source_commit
+        )
         if source_dockerfile is None:
             raise GiteaError("The service Dockerfile is unavailable.")
-        for repository_path, permission in ((service.repository_path, "read"), (attack.path, "write"), (defense.path, "write")):
+        for repository_path, permission in (
+            (service.repository_path, "read"),
+            (attack.path, "write"),
+            (defense.path, "write"),
+        ):
             owner = repository_path.split("/", 1)[0]
             if owner != user.gitea_username:
-                add_repository_collaborator(settings, repository_path, username=user.gitea_username, permission=permission)
+                add_repository_collaborator(
+                    settings, repository_path, username=user.gitea_username, permission=permission
+                )
         for repository_path in (attack.path, defense.path):
-            ensure_repository_webhook(settings, repository_path, secret=webhook_secret, branch_filter=service.default_branch)
+            ensure_repository_webhook(
+                settings,
+                repository_path,
+                secret=webhook_secret,
+                branch_filter=service.default_branch,
+            )
     except GiteaError:
+        for repository in (defense, attack):
+            if repository is None:
+                continue
+            try:
+                delete_repository(settings, repository.path)
+            except GiteaError:
+                pass
         raise
 
     return ParticipantService(
