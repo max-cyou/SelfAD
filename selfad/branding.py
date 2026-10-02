@@ -19,53 +19,63 @@ class PaletteField:
 
 
 PALETTE_FIELDS = {
-    "page_color": PaletteField("Page background", "page", "#F6F7F9", "Base"),
-    "surface_color": PaletteField("Blocks", "surface", "#FFFFFF", "Base"),
-    "surface_subtle_color": PaletteField(
-        "Subtle blocks", "surface-subtle", "#FAFBFC", "Base"
-    ),
-    "text_color": PaletteField("Primary text", "text", "#172033", "Text & borders"),
-    "text_soft_color": PaletteField("Secondary text", "text-soft", "#354052", "Text & borders"),
-    "muted_color": PaletteField("Muted text", "muted", "#687386", "Text & borders"),
-    "border_color": PaletteField("Borders", "border", "#DFE3E8", "Text & borders"),
+    "page_color": PaletteField("Page background", "page", "#050505", "Base"),
+    "surface_color": PaletteField("Blocks", "surface", "#090909", "Base"),
+    "surface_subtle_color": PaletteField("Subtle blocks", "surface-subtle", "#101010", "Base"),
+    "text_color": PaletteField("Primary text", "text", "#F1F1ED", "Text & borders"),
+    "text_soft_color": PaletteField("Secondary text", "text-soft", "#C4C4BF", "Text & borders"),
+    "muted_color": PaletteField("Muted text", "muted", "#777773", "Text & borders"),
+    "border_color": PaletteField("Borders", "border", "#252525", "Text & borders"),
     "border_hover_color": PaletteField(
-        "Hovered borders", "border-hover", "#B8C0CC", "Text & borders"
+        "Hovered borders", "border-hover", "#464646", "Text & borders"
     ),
-    "focus_color": PaletteField("Focus ring", "focus", "#2563EB", "Text & borders"),
-    "accent_color": PaletteField("Links", "accent", "#2563EB", "Links & actions"),
+    "focus_color": PaletteField("Focus ring", "focus", "#F1F1ED", "Text & borders"),
+    "accent_color": PaletteField("Links", "accent", "#F1F1ED", "Links & actions"),
     "accent_hover_color": PaletteField(
-        "Hovered links", "accent-hover", "#1D4ED8", "Links & actions"
+        "Hovered links", "accent-hover", "#FFFFFF", "Links & actions"
     ),
     "accent_contrast_color": PaletteField(
-        "Text on accent", "accent-contrast", "#FFFFFF", "Links & actions"
+        "Text on accent", "accent-contrast", "#050505", "Links & actions"
     ),
-    "button_color": PaletteField("Primary button", "button", "#172033", "Links & actions"),
-    "button_hover_color": PaletteField("Button hover", "button-hover", "#354052", "Links & actions"),
-    "button_text_color": PaletteField("Button text", "button-text", "#FFFFFF", "Links & actions"),
-    "success_color": PaletteField("Success", "success", "#287455", "Statuses"),
-    "success_soft_color": PaletteField("Success background", "success-soft", "#EEF6F1", "Statuses"),
-    "warning_color": PaletteField("Warning", "warning", "#9A6700", "Statuses"),
-    "warning_soft_color": PaletteField("Warning background", "warning-soft", "#FFF8C5", "Statuses"),
-    "danger_color": PaletteField("Error", "danger", "#DC2626", "Statuses"),
-    "danger_soft_color": PaletteField(
-        "Error background", "danger-soft", "#FEF2F2", "Statuses"
+    "button_color": PaletteField("Primary button", "button", "#F1F1ED", "Links & actions"),
+    "button_hover_color": PaletteField(
+        "Button hover", "button-hover", "#FFFFFF", "Links & actions"
     ),
-    "input_color": PaletteField("Input background", "input", "#FFFFFF", "Forms & tables"),
-    "input_disabled_color": PaletteField("Disabled input", "input-disabled", "#FAFBFC", "Forms & tables"),
-    "table_heading_color": PaletteField("Table headings", "table-heading", "#FAFBFC", "Forms & tables"),
-    "table_hover_color": PaletteField("Hovered row", "table-hover", "#FAFBFC", "Forms & tables"),
-    "table_selected_color": PaletteField("Selected row", "table-selected", "#F3F6FA", "Forms & tables"),
-    "header_color": PaletteField("Header background", "header", "#FFFFFF", "Header"),
-    "header_text_color": PaletteField("Tournament title", "header-text", "#111827", "Header"),
-    "header_link_color": PaletteField("Navigation links", "header-link", "#6B7280", "Header"),
-    "header_link_hover_color": PaletteField("Active navigation", "header-link-hover", "#111827", "Header"),
-    "home_color": PaletteField("Home background", "home", "#FFFFFF", "Home & footer"),
-    "home_title_color": PaletteField("Home title", "home-title", "#111827", "Home & footer"),
-    "home_text_color": PaletteField("Home status", "home-text", "#6B7280", "Home & footer"),
-    "home_link_color": PaletteField("Home links", "home-link", "#4B5563", "Home & footer"),
-    "home_link_hover_color": PaletteField("Home link hover", "home-link-hover", "#111827", "Home & footer"),
-    "footer_text_color": PaletteField("Footer text", "footer-text", "#9CA3AF", "Home & footer"),
-    "footer_hover_color": PaletteField("Footer link hover", "footer-hover", "#6B7280", "Home & footer"),
+    "button_text_color": PaletteField("Button text", "button-text", "#050505", "Links & actions"),
+    "success_color": PaletteField("Success", "success", "#82D9A2", "Statuses"),
+    "success_soft_color": PaletteField("Success background", "success-soft", "#0C1911", "Statuses"),
+    "warning_color": PaletteField("Warning", "warning", "#D9BD72", "Statuses"),
+    "warning_soft_color": PaletteField("Warning background", "warning-soft", "#1A160B", "Statuses"),
+    "danger_color": PaletteField("Error", "danger", "#FF6B6B", "Statuses"),
+    "danger_soft_color": PaletteField("Error background", "danger-soft", "#1C0C0C", "Statuses"),
+    "input_color": PaletteField("Input background", "input", "#050505", "Forms & tables"),
+    "input_disabled_color": PaletteField(
+        "Disabled input", "input-disabled", "#101010", "Forms & tables"
+    ),
+    "table_heading_color": PaletteField(
+        "Table headings", "table-heading", "#0D0D0D", "Forms & tables"
+    ),
+    "table_hover_color": PaletteField("Hovered row", "table-hover", "#101010", "Forms & tables"),
+    "table_selected_color": PaletteField(
+        "Selected row", "table-selected", "#161616", "Forms & tables"
+    ),
+    "header_color": PaletteField("Header background", "header", "#050505", "Header"),
+    "header_text_color": PaletteField("Tournament title", "header-text", "#F1F1ED", "Header"),
+    "header_link_color": PaletteField("Navigation links", "header-link", "#777773", "Header"),
+    "header_link_hover_color": PaletteField(
+        "Active navigation", "header-link-hover", "#F1F1ED", "Header"
+    ),
+    "home_color": PaletteField("Home background", "home", "#050505", "Home & footer"),
+    "home_title_color": PaletteField("Home title", "home-title", "#F1F1ED", "Home & footer"),
+    "home_text_color": PaletteField("Home status", "home-text", "#777773", "Home & footer"),
+    "home_link_color": PaletteField("Home links", "home-link", "#A7A7A2", "Home & footer"),
+    "home_link_hover_color": PaletteField(
+        "Home link hover", "home-link-hover", "#FFFFFF", "Home & footer"
+    ),
+    "footer_text_color": PaletteField("Footer text", "footer-text", "#777773", "Home & footer"),
+    "footer_hover_color": PaletteField(
+        "Footer link hover", "footer-hover", "#F1F1ED", "Home & footer"
+    ),
 }
 
 PALETTE_GROUPS = tuple(
@@ -77,8 +87,7 @@ PALETTE_GROUPS = tuple(
 )
 
 HOME_ARROW_SVG = (
-    '<svg viewBox="0 0 12 12" aria-hidden="true">'
-    '<path d="M2 6h7M6.5 2.5 10 6 6.5 9.5"/></svg>'
+    '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h7M6.5 2.5 10 6 6.5 9.5"/></svg>'
 )
 
 
@@ -126,8 +135,7 @@ def get_palette_values(palette: PaletteSettings | None) -> dict[str, str]:
 
 def build_palette_style(values: dict[str, str]) -> str:
     return "; ".join(
-        f"--{field.css_variable}: {values[name]}"
-        for name, field in PALETTE_FIELDS.items()
+        f"--{field.css_variable}: {values[name]}" for name, field in PALETTE_FIELDS.items()
     )
 
 
@@ -136,18 +144,10 @@ def get_branding_context(session: Session) -> dict[str, object]:
     branding = session.get(BrandingSettings, 1)
     palette = session.get(PaletteSettings, 1)
     is_configured = bool(config and config.setup_complete)
-    registration_enabled = bool(
-        is_configured and config and config.registration_enabled
-    )
-    registration_invite_only = bool(
-        config and config.registration_invite_only
-    )
-    change_title = bool(
-        is_configured and branding and branding.change_title
-    )
-    remove_standard_logo = bool(
-        is_configured and branding and branding.remove_standard_logo
-    )
+    registration_enabled = bool(is_configured and config and config.registration_enabled)
+    registration_invite_only = bool(config and config.registration_invite_only)
+    change_title = bool(is_configured and branding and branding.change_title)
+    remove_standard_logo = bool(is_configured and branding and branding.remove_standard_logo)
     site_name = config.site_name if is_configured else "SelfAD"
     brand_title = site_name if change_title else "SelfAD"
     show_standard_logo = not remove_standard_logo
@@ -155,15 +155,11 @@ def get_branding_context(session: Session) -> dict[str, object]:
     stored_not_started_html = branding.homepage_html if branding else ""
     stored_started_html = branding.started_homepage_html if branding else ""
     stored_ended_html = branding.ended_homepage_html if branding else ""
-    not_started_homepage_html = (
-        stored_not_started_html or default_not_started_homepage_html(site_name)
+    not_started_homepage_html = stored_not_started_html or default_not_started_homepage_html(
+        site_name
     )
-    started_homepage_html = (
-        stored_started_html or default_started_homepage_html(site_name)
-    )
-    ended_homepage_html = (
-        stored_ended_html or default_ended_homepage_html(site_name)
-    )
+    started_homepage_html = stored_started_html or default_started_homepage_html(site_name)
+    ended_homepage_html = stored_ended_html or default_ended_homepage_html(site_name)
     current_contest_state = contest_state(config)
 
     return {

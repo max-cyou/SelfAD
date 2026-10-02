@@ -1,45 +1,47 @@
 /* SelfAD — shared tokens, components, pages, then responsive layout. */
 :root {
-  --page: #f6f7f9;
-  --surface: #fff;
-  --surface-subtle: #fafbfc;
-  --text: #172033;
-  --text-soft: #354052;
-  --muted: #687386;
-  --border: #dfe3e8;
-  --border-hover: #b8c0cc;
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-contrast: #fff;
-  --danger: #dc2626;
-  --danger-soft: #fef2f2;
-  --success: #287455;
-  --success-soft: #eef6f1;
-  --warning: #9a6700;
-  --warning-soft: #fff8c5;
-  --focus: #2563eb;
-  --button: #172033;
-  --button-hover: #354052;
-  --button-text: #fff;
-  --input: #fff;
-  --input-disabled: #fafbfc;
-  --table-heading: #fafbfc;
-  --table-hover: #fafbfc;
-  --table-selected: #f3f6fa;
-  --header: #fff;
-  --header-text: #111827;
-  --header-link: #6b7280;
-  --header-link-hover: #111827;
-  --home: #fff;
-  --home-title: #111827;
-  --home-text: #6b7280;
-  --home-link: #4b5563;
-  --home-link-hover: #111827;
-  --footer-text: #9ca3af;
-  --footer-hover: #6b7280;
-  --radius: 12px;
-  --control-radius: 8px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --page: #050505;
+  --surface: #090909;
+  --surface-subtle: #101010;
+  --text: #f1f1ed;
+  --text-soft: #c4c4bf;
+  --muted: #777773;
+  --border: #252525;
+  --border-hover: #464646;
+  --accent: #f1f1ed;
+  --accent-hover: #fff;
+  --accent-contrast: #050505;
+  --danger: #ff6b6b;
+  --danger-soft: #1c0c0c;
+  --success: #82d9a2;
+  --success-soft: #0c1911;
+  --warning: #d9bd72;
+  --warning-soft: #1a160b;
+  --focus: #f1f1ed;
+  --button: #f1f1ed;
+  --button-hover: #fff;
+  --button-text: #050505;
+  --input: #050505;
+  --input-disabled: #101010;
+  --table-heading: #0d0d0d;
+  --table-hover: #101010;
+  --table-selected: #161616;
+  --header: #050505;
+  --header-text: #f1f1ed;
+  --header-link: #777773;
+  --header-link-hover: #f1f1ed;
+  --home: #050505;
+  --home-title: #f1f1ed;
+  --home-text: #777773;
+  --home-link: #a7a7a2;
+  --home-link-hover: #fff;
+  --footer-text: #777773;
+  --footer-hover: #f1f1ed;
+  --radius: 2px;
+  --control-radius: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  color-scheme: dark;
   color: var(--text);
   background: var(--page);
 }
@@ -58,8 +60,8 @@ body {
   margin: 0;
   color: var(--text);
   background: var(--page);
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 button, input, select, textarea {
@@ -91,22 +93,22 @@ h1, h2, h3, p {
 }
 
 h1 {
-  font-size: 28px;
-  font-weight: 600;
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 400;
   line-height: 1.25;
-  letter-spacing: -.025em;
+  letter-spacing: -.04em;
 }
 
 h2 {
   font-size: 19px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.4;
   letter-spacing: -.015em;
 }
 
 h3 {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 strong, b {
@@ -155,9 +157,9 @@ pre {
 
 .page > main {
   flex: 1 0 auto;
-  width: min(100% - 48px, 1080px);
+  width: min(100% - 64px, 1120px);
   margin: 0 auto;
-  padding: 48px 0 56px;
+  padding: 64px 0 72px;
 }
 
 .page--admin > .admin-main {
@@ -169,12 +171,13 @@ pre {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  width: min(100% - 48px, 1200px);
-  min-height: 68px;
-  margin: 16px auto 0;
-  padding: 0 20px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  width: min(100% - 64px, 1200px);
+  min-height: 84px;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
   background: var(--header);
 }
 
@@ -184,9 +187,9 @@ pre {
   gap: 9px;
   flex: none;
   color: var(--header-text);
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -.01em;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -.04em;
   text-decoration: none;
 }
 
@@ -195,6 +198,7 @@ pre {
   width: 22px;
   height: 22px;
   object-fit: contain;
+  filter: grayscale(1) brightness(2);
 }
 
 .site-header nav {
@@ -206,7 +210,7 @@ pre {
 
 .site-header nav a {
   color: var(--header-link);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 400;
   white-space: nowrap;
   text-decoration: none;
@@ -216,14 +220,23 @@ pre {
   color: var(--header-link-hover);
 }
 
+.site-header nav a.active::before {
+  content: "[";
+}
+
+.site-header nav a.active::after {
+  content: "]";
+}
+
 .site-footer {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 6px;
-  width: min(100% - 48px, 1200px);
+  width: min(100% - 64px, 1200px);
   margin: 0 auto;
-  padding: 24px 0 20px;
+  padding: 24px 0 28px;
+  border-top: 1px solid var(--border);
   color: var(--footer-text);
   font-size: 11px;
   font-weight: 400;
@@ -246,26 +259,27 @@ pre {
 .page > .home-main {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  width: min(100% - 48px, 1200px);
+  width: min(100% - 64px, 1200px);
   min-height: 0;
-  padding: 0 24px;
-  text-align: center;
+  padding: 0;
+  text-align: left;
 }
 
 .home-main h1 {
   color: var(--home-title);
-  font-size: clamp(38px, 6vw, 64px);
-  font-weight: 600;
-  letter-spacing: -.02em;
-  line-height: normal;
+  max-width: 900px;
+  font-size: clamp(48px, 8vw, 104px);
+  font-weight: 400;
+  letter-spacing: -.065em;
+  line-height: .95;
 }
 
 .home-main p {
-  margin: 14px 0 0;
+  margin: 18px 0 0;
   color: var(--home-text);
-  font-size: clamp(17px, 2vw, 22px);
+  font-size: clamp(22px, 3vw, 40px);
   font-weight: 400;
   letter-spacing: 0;
 }
@@ -273,7 +287,7 @@ pre {
 .home-links {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   gap: 10px;
   margin-top: 28px;
@@ -318,7 +332,7 @@ button, .services-heading-actions > a, .services-empty a {
   border-radius: var(--control-radius);
   color: var(--text);
   background: var(--surface);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.4;
   cursor: pointer;
@@ -355,6 +369,7 @@ input:not([type="checkbox"]):not([type="hidden"]), select, textarea {
   border-radius: var(--control-radius);
   color: var(--text);
   background: var(--input);
+  caret-color: var(--text);
   line-height: 1.4;
 }
 
@@ -593,15 +608,16 @@ input[type="checkbox"] {
 /* Administration. */
 .admin-workspace {
   display: grid;
-  grid-template-columns: 164px minmax(0, 1fr);
+  grid-template-columns: 172px minmax(0, 1fr);
   align-items: start;
   gap: 24px;
 }
 
 .admin-sidebar {
-  padding: 7px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  padding: 0 20px 0 0;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
 }
 
 .admin-section-nav {
@@ -612,7 +628,8 @@ input[type="checkbox"] {
 .admin-section-nav button {
   justify-content: flex-start;
   width: 100%;
-  padding: 10px 12px;
+  min-height: 36px;
+  padding: 8px 0;
   border-color: transparent;
   color: var(--muted);
   background: transparent;
@@ -621,13 +638,18 @@ input[type="checkbox"] {
 
 .admin-section-nav button:hover {
   color: var(--text);
-  background: var(--table-heading);
+  background: transparent;
 }
 
 .admin-section-nav button.active {
   color: var(--text);
-  background: var(--page);
-  font-weight: 600;
+  background: transparent;
+  font-weight: 500;
+}
+
+.admin-section-nav button.active::before {
+  content: "→";
+  margin-right: 8px;
 }
 
 .admin-content, .admin-panel {
@@ -1765,6 +1787,8 @@ a.repository-link:hover small {
 
   .admin-sidebar {
     padding: 5px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
   }
 
   .admin-panel .panel-heading, .form-heading, .participant-service-heading {
