@@ -43,7 +43,7 @@ class SshKeyRotationTests(unittest.TestCase):
         self.assertIn("def delete_user_ssh_key", gitea)
 
     def test_admin_replace_flow_removes_the_old_key_first(self):
-        admin = _read("selfad/routes/admin.py")
+        admin = _read("selfad/routes/admin_users.py")
         self.assertNotIn("This user already has an SSH key.", admin)
         self.assertIn("delete_user_ssh_key", admin)
         self.assertIn('values["ssh_public_key"] != target.ssh_public_key', admin)

@@ -22,7 +22,7 @@ class RegistrationErrorHandlingTests(unittest.TestCase):
 
     def test_conflicts_map_to_form_fields_not_gateway_errors(self):
         participants = _read("selfad/routes/participants.py")
-        admin = _read("selfad/routes/admin.py")
+        admin = _read("selfad/routes/admin_users.py")
         self.assertIn('"username" if gitea_user is None', participants)
         self.assertIn('"username" if gitea_user is None', admin)
         # Only real backend unavailability may render a 502.
@@ -30,7 +30,10 @@ class RegistrationErrorHandlingTests(unittest.TestCase):
         self.assertIn("except GiteaUnavailable", admin)
 
     def test_half_created_gitea_users_are_rolled_back(self):
-        for route in ("selfad/routes/participants.py", "selfad/routes/admin.py"):
+        for route in (
+            "selfad/routes/participants.py",
+            "selfad/routes/admin_users.py",
+        ):
             content = _read(route)
             self.assertIn("delete_gitea_user", content)
 

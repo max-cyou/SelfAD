@@ -10,9 +10,9 @@ class ServiceOrderTests(unittest.TestCase):
         participants = (
             PROJECT_DIR / "selfad" / "routes" / "participants.py"
         ).read_text(encoding="utf-8")
-        admin = (PROJECT_DIR / "selfad" / "routes" / "admin.py").read_text(
-            encoding="utf-8"
-        )
+        admin = (
+            PROJECT_DIR / "selfad" / "routes" / "admin_shared.py"
+        ).read_text(encoding="utf-8")
 
         self.assertEqual(participants.count(".order_by(Service.id)"), 2)
         self.assertIn("select(Service).order_by(Service.id)", admin)
