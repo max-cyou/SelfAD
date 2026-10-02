@@ -30,7 +30,7 @@ services:
       - "${SELFAD_GITEA_HTTP_BIND:-0.0.0.0}:${SELFAD_GITEA_HTTP_PORT:-8929}:8929"
       - "${SELFAD_GITEA_SSH_PORT:-2224}:22"
     environment:
-      SELFAD_ENABLE_INTERNAL_RUNNER: "false"
+      SELFAD_ENABLE_INTERNAL_RUNNER: "true"
       SELFAD_RUNNER_DOCKER_HOST: tcp://runner:2376
       SELFAD_RUNNER_TLS_VERIFY: "true"
       SELFAD_RUNNER_CERT_PATH: /run/selfad-runner-tls/client

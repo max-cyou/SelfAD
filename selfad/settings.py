@@ -34,7 +34,9 @@ class RunnerSettings:
 
     @property
     def uses_internal_runner(self) -> bool:
-        return self.docker_host.startswith("unix:///run/selfad-docker/")
+        return self.internal_runner_enabled or self.docker_host.startswith(
+            "unix:///run/selfad-docker/"
+        )
 
 
 def get_session_secret() -> str:

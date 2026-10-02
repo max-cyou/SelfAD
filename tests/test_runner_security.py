@@ -38,6 +38,21 @@ class RunnerSecurityTests(unittest.TestCase):
             self.assertFalse(settings.internal_runner_enabled)
             self.assertEqual(runner_mode(), "unavailable")
 
+    def test_compose_dind_runner_is_reported_as_internal(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SELFAD_ENABLE_INTERNAL_RUNNER": "true",
+                "SELFAD_RUNNER_DOCKER_HOST": "tcp://runner:2376",
+                "SELFAD_RUNNER_TLS_VERIFY": "true",
+                "SELFAD_RUNNER_CERT_PATH": "/run/selfad-runner-tls/client",
+            },
+            clear=True,
+        ):
+            settings = get_runner_settings()
+            self.assertTrue(settings.uses_internal_runner)
+            self.assertEqual(runner_mode(), "internal")
+
     def test_external_runner_settings_enable_tls(self):
         with patch.dict(
             os.environ,
