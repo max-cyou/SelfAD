@@ -26,6 +26,7 @@ def _make_player() -> ParticipantService:
 class AttemptAggregatesTests(unittest.TestCase):
     def test_counters_and_pruning_keep_scoring_stable(self):
         engine = create_engine("sqlite:///:memory:")
+        self.addCleanup(engine.dispose)
         Base.metadata.create_all(engine)
         with Session(engine) as session:
             settings = ScoringSettings(

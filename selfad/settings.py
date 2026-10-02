@@ -1,13 +1,15 @@
 import os
+import re
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
 from selfad.database import DATA_DIR
 
-
 SESSION_SECRET_PATH = DATA_DIR / "session.secret"
 GITEA_WEBHOOK_SECRET_PATH = DATA_DIR / "gitea_webhook.secret"
+RUNNER_INSTANCE_ID_PATH = DATA_DIR / "runner.instance"
+RUNNER_INSTANCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{7,63}$")
 
 
 @dataclass(frozen=True)
@@ -96,6 +98,72 @@ def get_gitea_webhook_secret() -> str:
 def use_secure_cookies() -> bool:
     value = os.getenv("SELFAD_SECURE_COOKIES", "false")
     return value.lower() in {"1", "true", "yes", "on"}
+
+
+def public_event_mode_enabled() -> bool:
+    value = os.getenv("SELFAD_PUBLIC_EVENT_MODE", "false")
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def validate_public_event_settings(database_url: str) -> None:
+    """Fail closed when a public deployment uses development-grade settings."""
+    if not public_event_mode_enabled():
+        return
+
+    errors: list[str] = []
+    runner = get_runner_settings()
+    gitea = get_gitea_settings()
+    if not database_url.startswith("postgresql"):
+        errors.append("SELFAD_DATABASE_URL must use PostgreSQL")
+    elif "replace-with" in database_url:
+        errors.append("SELFAD_DATABASE_URL still contains a placeholder password")
+    if not use_secure_cookies():
+        errors.append("SELFAD_SECURE_COOKIES must be enabled")
+    try:
+        trusted_proxies = get_trusted_proxy_hosts()
+    except RuntimeError as error:
+        errors.append(str(error))
+    else:
+        if not trusted_proxies:
+            errors.append("trusted proxy headers must be configured")
+    if not gitea.public_url.startswith("https://"):
+        errors.append("SELFAD_GITEA_PUBLIC_URL must use HTTPS")
+    if (
+        runner.uses_internal_runner
+        or runner.internal_runner_enabled
+        or not runner.docker_host.startswith("tcp://")
+        or not runner.tls_verify
+        or not runner.cert_path
+    ):
+        errors.append("the runner must be an external mTLS Docker endpoint")
+    elif runner.cert_path:
+        missing_certificates = [
+            name
+            for name in ("ca.pem", "cert.pem", "key.pem")
+            if not (Path(runner.cert_path) / name).is_file()
+        ]
+        if missing_certificates:
+            errors.append(
+                "runner TLS directory is missing "
+                + ", ".join(missing_certificates)
+            )
+    if os.getenv("SELFAD_RUNNER_ISOLATION", "") != "dedicated-host":
+        errors.append(
+            "SELFAD_RUNNER_ISOLATION must acknowledge a dedicated-host runner"
+        )
+    session_secret = os.getenv("SELFAD_SECRET_KEY", "")
+    if len(session_secret) < 32 or session_secret.startswith("replace-"):
+        errors.append("SELFAD_SECRET_KEY must contain at least 32 characters")
+    metrics_token = os.getenv("SELFAD_METRICS_TOKEN", "")
+    if len(metrics_token) < 32 or metrics_token.startswith("replace-"):
+        errors.append("SELFAD_METRICS_TOKEN must contain at least 32 characters")
+    setup_token = os.getenv("SELFAD_SETUP_TOKEN", "")
+    if len(setup_token) < 32 or setup_token.startswith("replace-"):
+        errors.append("SELFAD_SETUP_TOKEN must contain at least 32 characters")
+    if errors:
+        raise RuntimeError(
+            "Unsafe public-event configuration: " + "; ".join(errors)
+        )
 
 
 def get_trusted_proxy_hosts() -> list[str] | None:
@@ -193,6 +261,36 @@ def get_runner_settings() -> RunnerSettings:
         cert_path=cert_path,
         internal_runner_enabled=internal_runner in {"1", "true", "yes", "on"},
     )
+
+
+def get_runner_instance_id() -> str:
+    configured = os.getenv("SELFAD_RUNNER_INSTANCE_ID", "").strip()
+    if configured:
+        if not RUNNER_INSTANCE_ID_PATTERN.fullmatch(configured):
+            raise RuntimeError(
+                "SELFAD_RUNNER_INSTANCE_ID must contain 8-64 safe characters"
+            )
+        return configured
+    try:
+        stored = RUNNER_INSTANCE_ID_PATH.read_text(encoding="utf-8").strip()
+        if not RUNNER_INSTANCE_ID_PATTERN.fullmatch(stored):
+            raise RuntimeError("Stored runner instance ID is invalid")
+        return stored
+    except FileNotFoundError:
+        pass
+
+    instance_id = secrets.token_hex(16)
+    try:
+        descriptor = os.open(
+            RUNNER_INSTANCE_ID_PATH,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
+    except FileExistsError:
+        return get_runner_instance_id()
+    with os.fdopen(descriptor, "w", encoding="utf-8") as target:
+        target.write(instance_id)
+    return instance_id
 
 
 def get_metrics_token() -> str | None:

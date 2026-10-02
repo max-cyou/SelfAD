@@ -1,16 +1,16 @@
 import hmac
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from selfad.gitea import GiteaError, get_authenticated_user
-from selfad.runner import runner_is_available, runner_mode
 from selfad.database import engine, get_session
+from selfad.gitea import GiteaError, get_authenticated_user
 from selfad.models import ParticipantService, RepositoryEvent
+from selfad.runner import runner_is_available, runner_mode
 from selfad.settings import get_gitea_settings, get_metrics_token
-
 
 router = APIRouter()
 
@@ -67,6 +67,25 @@ def metrics(
     assignments = session.scalar(
         select(func.count()).select_from(ParticipantService)
     ) or 0
+    now = datetime.now(timezone.utc)
+
+    def event_age(status: str, timestamp_column) -> float:
+        oldest = session.scalar(
+            select(func.min(timestamp_column)).where(
+                RepositoryEvent.status == status
+            )
+        )
+        if oldest is None:
+            return 0.0
+        if oldest.tzinfo is None:
+            oldest = oldest.replace(tzinfo=timezone.utc)
+        return max(0.0, (now - oldest).total_seconds())
+
+    oldest_pending_age = event_age("pending", RepositoryEvent.received_at)
+    oldest_processing_age = event_age(
+        "processing",
+        RepositoryEvent.processing_started_at,
+    )
     lines = [
         "# HELP selfad_repository_events Number of repository events by state.",
         "# TYPE selfad_repository_events gauge",
@@ -79,6 +98,16 @@ def metrics(
             "# HELP selfad_participant_services Number of issued participant services.",
             "# TYPE selfad_participant_services gauge",
             f"selfad_participant_services {assignments}",
+            "# HELP selfad_oldest_repository_event_seconds Age of the oldest queue event.",
+            "# TYPE selfad_oldest_repository_event_seconds gauge",
+            (
+                "selfad_oldest_repository_event_seconds"
+                f'{{status="pending"}} {oldest_pending_age:.3f}'
+            ),
+            (
+                "selfad_oldest_repository_event_seconds"
+                f'{{status="processing"}} {oldest_processing_age:.3f}'
+            ),
             "# HELP selfad_runner_mode Runner deployment mode (1 for current mode).",
             "# TYPE selfad_runner_mode gauge",
             f'selfad_runner_mode{{mode="{runner_mode()}"}} 1',

@@ -13,7 +13,6 @@ from selfad.models import ParticipantService, Service, User
 from selfad.repository_readmes import attack_readme
 from selfad.settings import GiteaSettings
 
-
 ATTACK_DOCKERFILE = b'FROM python:3.13-alpine\nWORKDIR /workspace\nCMD ["python", "exploit.py"]\n'
 ATTACK_EXPLOIT = b'''import os
 import sys

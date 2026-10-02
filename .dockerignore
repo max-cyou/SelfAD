@@ -2,6 +2,9 @@
 # transfer of local databases, keys, test fixtures and editor files to Docker.
 *
 !Dockerfile
+!alembic.ini
+!migrations/
+!migrations/**
 !requirements.txt
 !main.py
 !selfad/

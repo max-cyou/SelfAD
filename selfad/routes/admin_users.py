@@ -32,7 +32,6 @@ from selfad.settings import (
     set_gitea_root_password,
 )
 
-
 router = APIRouter()
 
 

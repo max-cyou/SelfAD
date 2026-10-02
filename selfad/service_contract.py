@@ -11,7 +11,6 @@ from selfad.gitea import (
 )
 from selfad.settings import GiteaSettings
 
-
 MAX_CONFIG_BYTES = 64 * 1024
 MAX_SOURCE_BYTES = 256 * 1024
 

@@ -8,7 +8,6 @@ from selfad.models import ParticipantService, ScoringSettings
 from selfad.runner import _run_command, _stdout_has_noise
 from selfad.scoring import ATTACK, record_submission_score
 
-
 FLAG = "A1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6"
 
 
@@ -30,6 +29,7 @@ class StdoutPenaltyTests(unittest.TestCase):
 
     def test_noisy_attack_adds_debt_and_awards_no_score(self):
         engine = create_engine("sqlite:///:memory:")
+        self.addCleanup(engine.dispose)
         Base.metadata.create_all(engine)
         with Session(engine) as session:
             settings = ScoringSettings(
@@ -87,6 +87,7 @@ class StdoutPenaltyTests(unittest.TestCase):
 
     def test_noisy_attack_can_add_a_percentage_cost_without_rejection(self):
         engine = create_engine("sqlite:///:memory:")
+        self.addCleanup(engine.dispose)
         Base.metadata.create_all(engine)
         with Session(engine) as session:
             settings = ScoringSettings(

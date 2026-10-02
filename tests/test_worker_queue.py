@@ -20,6 +20,7 @@ class WorkerQueueTests(unittest.TestCase):
                 f"sqlite:///{database_path}",
                 connect_args={"check_same_thread": False},
             )
+            self.addCleanup(engine.dispose)
             Base.metadata.create_all(engine)
             local_session = sessionmaker(bind=engine, expire_on_commit=False)
             with local_session() as session:

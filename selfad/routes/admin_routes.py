@@ -6,7 +6,6 @@ from selfad.database import get_session
 from selfad.routes import admin_services, admin_settings, admin_users
 from selfad.routes.admin_shared import get_admin_access, render_admin
 
-
 router = APIRouter()
 
 

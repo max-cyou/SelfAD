@@ -16,8 +16,11 @@ from pathlib import Path, PurePosixPath
 from selfad.database import DATA_DIR
 from selfad.gitea import download_repository_archive
 from selfad.service_contract import ServiceContractResult
-from selfad.settings import GiteaSettings, get_runner_settings
-
+from selfad.settings import (
+    GiteaSettings,
+    get_runner_instance_id,
+    get_runner_settings,
+)
 
 WORK_DIR = DATA_DIR / "work"
 JURY_IMAGE = "python:3.13-alpine"
@@ -40,6 +43,17 @@ _SERVICE_CACHE_BUILD_LOCK = threading.Lock()
 
 class RunnerError(Exception):
     pass
+
+
+def _instance_label() -> str:
+    return f"selfad.instance={get_runner_instance_id()}"
+
+
+def _label_arguments(*labels: str) -> list[str]:
+    arguments: list[str] = []
+    for label in (*labels, _instance_label()):
+        arguments.extend(("--label", label))
+    return arguments
 
 
 @dataclass(frozen=True)
@@ -77,6 +91,8 @@ def _prune_service_image_cache() -> None:
             "{{.Repository}}:{{.Tag}}",
             "--filter",
             f"label={SERVICE_CACHE_LABEL}",
+            "--filter",
+            f"label={_instance_label()}",
         ],
         timeout=30,
         max_output=32 * 1024,
@@ -115,9 +131,18 @@ def cleanup_managed_runner_resources() -> int:
         return 0
     removed = 0
     resource_commands = (
-        ("ps", "-aq", "--filter", f"label={RUNNER_LABEL}"),
-        ("network", "ls", "-q", "--filter", f"label={RUNNER_LABEL}"),
-        ("images", "-q", "--filter", f"label={RUNNER_LABEL}"),
+        (
+            "ps", "-aq", "--filter", f"label={RUNNER_LABEL}",
+            "--filter", f"label={_instance_label()}",
+        ),
+        (
+            "network", "ls", "-q", "--filter", f"label={RUNNER_LABEL}",
+            "--filter", f"label={_instance_label()}",
+        ),
+        (
+            "images", "-q", "--filter", f"label={RUNNER_LABEL}",
+            "--filter", f"label={_instance_label()}",
+        ),
     )
     for index, command in enumerate(resource_commands):
         result = _docker(list(command), timeout=30, max_output=32 * 1024)
@@ -227,14 +252,15 @@ def run_service_runtime_check(
                     == 0
                 )
             if not service_image_cached:
-                build_label = (
-                    SERVICE_CACHE_LABEL if cache_service_image else RUNNER_LABEL
+                build_labels = (
+                    (SERVICE_CACHE_LABEL,)
+                    if cache_service_image
+                    else (RUNNER_LABEL,)
                 )
                 build = _docker(
                     [
                         "build",
-                        "--label",
-                        build_label,
+                        *_label_arguments(*build_labels),
                         "--tag",
                         image_name,
                         str(source_path),
@@ -299,8 +325,7 @@ def run_service_runtime_check(
                     "network",
                     "create",
                     "--internal",
-                    "--label",
-                    RUNNER_LABEL,
+                    *_label_arguments(RUNNER_LABEL),
                     network_name,
                 ],
                 timeout=30,
@@ -314,8 +339,7 @@ def run_service_runtime_check(
                     "--detach",
                     "--name",
                     service_name,
-                    "--label",
-                    RUNNER_LABEL,
+                    *_label_arguments(RUNNER_LABEL),
                     "--network",
                     network_name,
                     "--network-alias",
@@ -538,8 +562,7 @@ def _run_jury_script(
             "--rm",
             "--name",
             container_name,
-            "--label",
-            RUNNER_LABEL,
+            *_label_arguments(RUNNER_LABEL),
             "--network",
             network_name,
             "--memory",
@@ -672,7 +695,13 @@ def _prepare_runtime_image(
         encoding="utf-8",
     )
     build = _docker(
-        ["build", "--label", RUNNER_LABEL, "--tag", image_name, str(context)],
+        [
+            "build",
+            *_label_arguments(RUNNER_LABEL),
+            "--tag",
+            image_name,
+            str(context),
+        ],
         timeout=300,
         max_output=2 * 1024 * 1024,
     )
@@ -697,8 +726,7 @@ def _wait_for_healthcheck(network_name: str, port: int, path: str) -> None:
         [
             "run",
             "--rm",
-            "--label",
-            RUNNER_LABEL,
+            *_label_arguments(RUNNER_LABEL),
             "--network",
             network_name,
             "--memory",

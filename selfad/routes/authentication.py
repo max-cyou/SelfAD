@@ -19,7 +19,6 @@ from selfad.rate_limit import client_key, rate_limiter
 from selfad.settings import get_gitea_settings, get_rate_limit
 from selfad.web import templates
 
-
 router = APIRouter()
 
 

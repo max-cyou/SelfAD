@@ -1,6 +1,8 @@
+import hmac
+import os
 import re
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -16,14 +18,30 @@ from selfad.gitea import (
 )
 from selfad.models import BrandingSettings, InstanceConfig, User
 from selfad.security import hash_password
-from selfad.settings import get_gitea_settings
+from selfad.settings import get_gitea_settings, public_event_mode_enabled
 from selfad.web import templates
-
 
 router = APIRouter()
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def authorize_public_setup(request: Request) -> bool:
+    if not public_event_mode_enabled():
+        return True
+    if request.session.get("setup_authorized") is True:
+        return True
+    expected = os.getenv("SELFAD_SETUP_TOKEN", "")
+    supplied = request.query_params.get("setup_token", "")
+    if (
+        len(expected) >= 32
+        and isinstance(supplied, str)
+        and hmac.compare_digest(supplied, expected)
+    ):
+        request.session["setup_authorized"] = True
+        return True
+    return False
 
 
 def render_setup(
@@ -92,6 +110,10 @@ def setup_page(
     request: Request,
     session: Session = Depends(get_session),
 ):
+    if not authorize_public_setup(request):
+        raise HTTPException(status_code=404, detail="Not found.")
+    if "setup_token" in request.query_params:
+        return RedirectResponse(url="/setup", status_code=303)
     config = session.get(InstanceConfig, 1)
     if config and config.setup_complete:
         return RedirectResponse(url="/", status_code=303)
@@ -120,6 +142,8 @@ def submit_setup(
     csrf_token: str = Form(...),
     session: Session = Depends(get_session),
 ):
+    if not authorize_public_setup(request):
+        raise HTTPException(status_code=404, detail="Not found.")
     config = session.get(InstanceConfig, 1)
     if config and config.setup_complete:
         return RedirectResponse(url="/", status_code=303)

@@ -9,7 +9,6 @@ from selfad.database import get_session
 from selfad.models import InstanceConfig
 from selfad.web import templates
 
-
 router = APIRouter()
 
 

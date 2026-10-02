@@ -10,7 +10,6 @@ from urllib.request import Request, urlopen
 from selfad.repository_readmes import jury_readme, organizer_readme
 from selfad.settings import GiteaSettings
 
-
 GITEA_REPOSITORY_OWNER = "root"
 
 

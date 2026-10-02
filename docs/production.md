@@ -21,10 +21,11 @@ For public internet events, use a VM or microVM per runner job (for example
 Firecracker, Kata Containers or a cloud VM pool) rather than treating Docker
 containers as a complete security boundary.
 
-SelfAD labels every temporary runner container, network and image. On a
-control-plane restart it removes only resources carrying that label and returns
-interrupted checks to the queue. Do not use the same runner for unrelated
-workloads.
+SelfAD labels every temporary runner container, network and image with both a
+managed marker and a persistent installation ID. On a control-plane restart it
+removes only resources belonging to that installation and returns interrupted
+checks to the queue. A shared runner is still discouraged because CPU, disk and
+build cache remain shared resources.
 
 ## Control-plane start
 
@@ -34,6 +35,20 @@ replace every secret and public URL, then run:
 ```bash
 docker compose -f docker-compose.production.yml up -d --build
 ```
+
+The production profile enables `SELFAD_PUBLIC_EVENT_MODE=true`. This is a
+fail-closed startup check: SelfAD refuses to start unless PostgreSQL, Secure
+cookies, explicit trusted proxies, HTTPS Gitea URLs, 32-character secrets and
+an external Docker endpoint with mutual TLS are all configured. Setting
+`SELFAD_RUNNER_ISOLATION=dedicated-host` is an explicit operator assertion that
+the endpoint is on the disposable runner host; SelfAD cannot infer physical or
+VM separation from a Docker URL.
+
+Before the first login, open
+`https://ctf.example/setup?setup_token=<SELFAD_SETUP_TOKEN>`. Public-event mode
+returns 404 from `/setup` until that token is presented, then stores the
+authorization in the signed browser session and redirects to a clean URL. Do
+not paste the token into chat or retain it in browser history.
 
 This creates a dedicated PostgreSQL volume and keeps it off the public network.
 The control plane is deliberately **not** privileged and does not mount a Docker
@@ -54,6 +69,8 @@ the image defaults would publish `localhost` links.
 
 The supplied image forces repositories private, disables participant repository
 creation, HTTP Git, repository migrations, file attachments and Gitea packages.
+Gitea's web login requires its built-in image CAPTCHA to slow password attacks;
+retain an outer proxy or firewall rate limit as an additional layer.
 Participants must use the SSH key they gave SelfAD to work with assigned
 repositories. The local Gitea site administrator remains able to provision
 tournament repositories.
@@ -69,11 +86,16 @@ Set a long random `SELFAD_METRICS_TOKEN` and scrape `GET /metrics` with
 `Authorization: Bearer <token>`. The endpoint exposes queue state, issued
 services and whether the current process uses an internal or external runner.
 
-SelfAD also applies per-process limits of 12 sign-in attempts and 6
+SelfAD applies limits of 12 sign-in attempts and 6
 registrations per IP per minute by default. Tune them with
-`SELFAD_LOGIN_RATE_LIMIT` and `SELFAD_REGISTRATION_RATE_LIMIT`; keep a stricter
-network-level rate limit in the reverse proxy because an in-process limit is
-not shared between replicas.
+`SELFAD_LOGIN_RATE_LIMIT` and `SELFAD_REGISTRATION_RATE_LIMIT`. Keep a stricter
+network-level rate limit in the reverse proxy, especially for Gitea's own web
+login endpoint.
+
+Exactly one control-plane process may own a SelfAD database. A PostgreSQL
+advisory lock (or a local file lock for SQLite) makes a second process fail at
+startup before it can recover queue entries or clean runner resources. Scale
+checks with `SELFAD_WORKER_CONCURRENCY`, not additional web replicas.
 
 `SELFAD_WORKER_CONCURRENCY` defaults to `1`, which is appropriate for a local
 machine and one runner. Increase it only after measuring the capacity of the
@@ -85,6 +107,9 @@ runner level rather than overcommitting the control plane.
 SelfAD uses PostgreSQL when `SELFAD_DATABASE_URL` is supplied. Create a
 dedicated `selfad` database and account; do not share it with Gitea, because
 both applications own tables such as `users` and `services`.
+Schema upgrades are applied through Alembic at startup. Always back up before
+an update; databases from pre-Alembic releases are upgraded once and stamped at
+the baseline revision.
 
 ## Runner host
 

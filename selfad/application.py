@@ -9,13 +9,18 @@ from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from selfad.database import SessionLocal, initialize_database
+from selfad.database import (
+    DATABASE_URL,
+    SessionLocal,
+    application_instance_lock,
+    initialize_database,
+)
 from selfad.gitea import (
     GiteaError,
     ensure_repository_webhook,
     get_authenticated_user,
 )
-from selfad.models import Service, User
+from selfad.models import ScoringSettings, Service, User
 from selfad.routes import (
     admin,
     authentication,
@@ -25,18 +30,19 @@ from selfad.routes import (
     setup,
     webhooks,
 )
+from selfad.runner import cleanup_managed_runner_resources
 from selfad.settings import (
     get_gitea_settings,
     get_gitea_webhook_secret,
     get_session_secret,
     get_trusted_proxy_hosts,
     get_worker_concurrency,
+    public_event_mode_enabled,
     use_secure_cookies,
+    validate_public_event_settings,
 )
-from selfad.runner import cleanup_managed_runner_resources
 from selfad.web import STATIC_DIR
 from selfad.worker import recover_interrupted_repository_events, run_repository_worker
-
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +58,17 @@ SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
     "Permissions-Policy": "camera=(), geolocation=(), microphone=()",
 }
+
+
+def validate_public_event_database_policy() -> None:
+    if not public_event_mode_enabled():
+        return
+    with SessionLocal() as session:
+        scoring = session.get(ScoringSettings, 1)
+        if scoring and scoring.allow_user_attack_requirements:
+            raise RuntimeError(
+                "Unsafe public-event scoring: participant requirements are enabled."
+            )
 
 
 def apply_security_headers(response):
@@ -115,27 +132,30 @@ def reconcile_repository_webhooks() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    initialize_database()
-    recover_interrupted_repository_events()
-    cleanup_managed_runner_resources()
-    reconcile_administrator_gitea_identity()
-    reconcile_repository_webhooks()
-    stop_event = asyncio.Event()
-    worker_tasks = [
-        asyncio.create_task(run_repository_worker(stop_event))
-        for _ in range(get_worker_concurrency())
-    ]
-    try:
-        yield
-    finally:
-        stop_event.set()
-        for worker_task in worker_tasks:
-            worker_task.cancel()
-        for worker_task in worker_tasks:
-            try:
-                await worker_task
-            except asyncio.CancelledError:
-                pass
+    validate_public_event_settings(DATABASE_URL)
+    with application_instance_lock():
+        initialize_database()
+        validate_public_event_database_policy()
+        recover_interrupted_repository_events()
+        cleanup_managed_runner_resources()
+        reconcile_administrator_gitea_identity()
+        reconcile_repository_webhooks()
+        stop_event = asyncio.Event()
+        worker_tasks = [
+            asyncio.create_task(run_repository_worker(stop_event))
+            for _ in range(get_worker_concurrency())
+        ]
+        try:
+            yield
+        finally:
+            stop_event.set()
+            for worker_task in worker_tasks:
+                worker_task.cancel()
+            for worker_task in worker_tasks:
+                try:
+                    await worker_task
+                except asyncio.CancelledError:
+                    pass
 
 
 def create_app() -> FastAPI:

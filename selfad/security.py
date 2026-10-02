@@ -3,7 +3,6 @@ import hashlib
 import hmac
 import secrets
 
-
 SCRYPT_N = 2**14
 SCRYPT_R = 8
 SCRYPT_P = 1

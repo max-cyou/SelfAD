@@ -2,5 +2,4 @@
 
 from selfad.routes.admin_routes import router
 
-
 __all__ = ["router"]

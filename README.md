@@ -487,6 +487,7 @@ solution, username. Equal scores share a rank; zero-point users are hidden.
 - 1 MiB streaming webhook body limit and delivery deduplication;
 - CSRF tokens on state-changing forms;
 - signed SameSite session cookies and optional Secure flag;
+- token-gated first-run setup in public-event mode;
 - scrypt password hashes in SelfAD (authentication is verified by Gitea);
 - CSP, frame denial, MIME sniffing protection and restrictive permissions
   policy;
@@ -496,7 +497,9 @@ solution, username. Equal scores share a rank; zero-point users are hidden.
 - cap-drop ALL, no-new-privileges, read-only filesystems, noexec tmpfs;
 - internal per-job network and CPU/RAM/PID/nofile limits;
 - labelled cleanup of managed Docker resources;
-- bounded pending queue and submission audit history.
+- bounded pending queue and submission audit history;
+- fail-closed public-event configuration checks and single-process ownership;
+- per-installation runner labels that scope crash cleanup;
 
 ### Trust boundaries
 
@@ -695,11 +698,12 @@ large Docker contexts can be much slower than the reference service.
 
 - The event queue lives in the SelfAD database; there is no Redis/Celery or
   distributed dispatcher.
-- Rate limits are in-process and not shared across replicas.
+- A database-backed/file-backed ownership lock intentionally permits only one
+  control-plane process per installation.
 - One SelfAD process configures one Docker endpoint; runner pooling is not
   built in.
-- Sharing a runner between SelfAD instances is unsupported because managed
-  cleanup labels are instance-agnostic.
+- Runner cleanup is scoped by a persistent installation label, but sharing one
+  runner still shares CPU, disk and build cache and is not recommended.
 - SQLite is for bundled/small events; PostgreSQL is the production scale path.
 - Build-time networking is runner-host policy and differs from internal
   runtime networking.
@@ -710,6 +714,8 @@ large Docker contexts can be much slower than the reference service.
 
 - MIT licensed;
 - CI runs the test suite on Python 3.11 and 3.14;
+- CI also checks Ruff, mypy, dependency advisories, PostgreSQL migrations,
+  Compose rendering and a complete Gitea/runner stack startup;
 - security reports are accepted privately via [SECURITY.md](SECURITY.md);
 - production and runner-host guides are available under [`docs/`](docs/).
 

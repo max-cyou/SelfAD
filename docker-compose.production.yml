@@ -28,8 +28,10 @@ services:
       - "${SELFAD_GITEA_SSH_PORT:-2224}:22"
     environment:
       SELFAD_ENABLE_INTERNAL_RUNNER: "false"
+      SELFAD_PUBLIC_EVENT_MODE: "true"
       SELFAD_DATABASE_URL: postgresql+psycopg://${SELFAD_POSTGRES_USER:-selfad}:${SELFAD_POSTGRES_PASSWORD}@postgres:5432/selfad
       SELFAD_RUNNER_DOCKER_HOST: ${SELFAD_RUNNER_DOCKER_HOST:?Set the remote TLS Docker endpoint}
+      SELFAD_RUNNER_ISOLATION: ${SELFAD_RUNNER_ISOLATION:?Set dedicated-host after verifying runner separation}
       SELFAD_RUNNER_TLS_VERIFY: "true"
       SELFAD_RUNNER_CERT_PATH: /run/selfad-runner-tls
       SELFAD_SECURE_COOKIES: "true"
@@ -41,6 +43,7 @@ services:
       GITEA__server__SSH_PORT: ${SELFAD_GITEA_SSH_PUBLIC_PORT:-2224}
       SELFAD_METRICS_TOKEN: ${SELFAD_METRICS_TOKEN:?Set a long random token}
       SELFAD_SECRET_KEY: ${SELFAD_SECRET_KEY:?Set a 32+ character random value}
+      SELFAD_SETUP_TOKEN: ${SELFAD_SETUP_TOKEN:?Set a 32+ character random setup token}
       SELFAD_WORKER_CONCURRENCY: ${SELFAD_WORKER_CONCURRENCY:-1}
       SELFAD_TRUST_PROXY_HEADERS: "true"
       SELFAD_TRUSTED_PROXY_HOSTS: 172.30.0.2

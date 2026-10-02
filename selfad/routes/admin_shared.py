@@ -32,7 +32,6 @@ from selfad.service_contract import ServiceContractResult, validate_service_cont
 from selfad.settings import get_gitea_settings, get_gitea_webhook_secret
 from selfad.web import templates
 
-
 SERVICE_SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$")
 USERS_PAGE_SIZE = 20

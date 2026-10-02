@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 
 from selfad.models import InstanceConfig
 
-
 NOT_STARTED = "not_started"
 STARTED = "started"
 ENDED = "ended"

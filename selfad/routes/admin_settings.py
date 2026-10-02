@@ -17,9 +17,22 @@ from selfad.routes.admin_shared import (
 )
 from selfad.scoring import get_scoring_settings
 from selfad.security import hash_password
-
+from selfad.settings import public_event_mode_enabled
 
 router = APIRouter()
+
+
+def add_public_scoring_errors(
+    scoring_values: dict[str, object],
+    errors: dict[str, str],
+) -> None:
+    if (
+        public_event_mode_enabled()
+        and scoring_values["allow_user_attack_requirements"]
+    ):
+        errors["allow_user_attack_requirements"] = (
+            "Participant-controlled dependencies are disabled in public-event mode."
+        )
 
 
 @router.post("/admin/appearance", response_class=HTMLResponse)
@@ -199,6 +212,7 @@ async def update_registration(
     contest_ends_at: datetime | None = None
     errors: dict[str, str] = {}
     errors.update(scoring_errors)
+    add_public_scoring_errors(scoring_values, errors)
     if requested_contest_state not in CONTEST_STATES:
         errors["contest_state"] = "Choose a valid contest state."
     if contest_starts_at_local:

@@ -20,6 +20,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     GITEA__security__INSTALL_LOCK=true \
     GITEA__service__DISABLE_REGISTRATION=true \
     GITEA__service__REQUIRE_SIGNIN_VIEW=true \
+    GITEA__service__ENABLE_CAPTCHA=true \
+    GITEA__service__REQUIRE_CAPTCHA_FOR_LOGIN=true \
+    GITEA__service__CAPTCHA_TYPE=image \
     GITEA__repository__FORCE_PRIVATE=true \
     GITEA__repository__MAX_CREATION_LIMIT=0 \
     GITEA__repository__DISABLE_HTTP_GIT=true \
@@ -50,6 +53,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN /opt/selfad/venv/bin/pip install --no-cache-dir -r requirements.txt
 
+COPY alembic.ini .
+COPY migrations ./migrations
 COPY main.py .
 COPY selfad ./selfad
 COPY docker/entrypoint.sh /opt/selfad/entrypoint.sh

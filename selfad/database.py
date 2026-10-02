@@ -1,11 +1,16 @@
+import fcntl
 import os
 from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
+ALEMBIC_CONFIG_PATH = PROJECT_DIR / "alembic.ini"
 DATA_DIR = Path(os.getenv("SELFAD_DATA_DIR", PROJECT_DIR / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -13,6 +18,7 @@ DATABASE_URL = os.getenv(
     "SELFAD_DATABASE_URL",
     f"sqlite:///{DATA_DIR / 'selfad.db'}",
 )
+INSTANCE_LOCK_KEY = 0x53454C464144
 
 connect_args = (
     {"check_same_thread": False}
@@ -38,12 +44,64 @@ def get_session() -> Generator[Session, None, None]:
         yield session
 
 
+@contextmanager
+def application_instance_lock() -> Generator[None, None, None]:
+    """Prevent two control-plane processes from managing one installation."""
+    if engine.dialect.name == "postgresql":
+        connection = engine.connect()
+        acquired = bool(
+            connection.scalar(
+                text("SELECT pg_try_advisory_lock(:key)"),
+                {"key": INSTANCE_LOCK_KEY},
+            )
+        )
+        if not acquired:
+            connection.close()
+            raise RuntimeError(
+                "Another SelfAD control-plane process already owns this database."
+            )
+        try:
+            yield
+        finally:
+            connection.execute(
+                text("SELECT pg_advisory_unlock(:key)"),
+                {"key": INSTANCE_LOCK_KEY},
+            )
+            connection.close()
+        return
+
+    lock_path = Path(
+        os.getenv("SELFAD_INSTANCE_LOCK_FILE", DATA_DIR / "instance.lock")
+    )
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise RuntimeError(
+                "Another SelfAD control-plane process already owns this data directory."
+            ) from error
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
 def initialize_database() -> None:
     from selfad import models as _models
 
-    Base.metadata.create_all(bind=engine)
-    _migrate_existing_sqlite_schema()
-    _migrate_existing_postgresql_schema()
+    config = Config(ALEMBIC_CONFIG_PATH)
+    config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
+    schema = inspect(engine)
+    existing_tables = set(schema.get_table_names()) - {"alembic_version"}
+    if existing_tables and "alembic_version" not in schema.get_table_names():
+        # One-time adoption path for databases created before Alembic. Bring
+        # the legacy schema to the baseline, then mark that baseline applied.
+        _migrate_existing_sqlite_schema()
+        _migrate_existing_postgresql_schema()
+        command.stamp(config, "0001")
+    else:
+        command.upgrade(config, "head")
     with SessionLocal() as session:
         if session.get(_models.ScoringSettings, 1) is None:
             session.add(_models.ScoringSettings(id=1))
@@ -531,6 +589,186 @@ def _migrate_existing_postgresql_schema() -> None:
     if engine.dialect.name != "postgresql":
         return
     with engine.begin() as connection:
+        def add_columns(table: str, columns: dict[str, str]) -> None:
+            for name, column_type in columns.items():
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
+                        f"{name} {column_type}"
+                    )
+                )
+
+        add_columns(
+            "instance_config",
+            {
+                "registration_enabled": "BOOLEAN NOT NULL DEFAULT FALSE",
+                "registration_invite_only": "BOOLEAN NOT NULL DEFAULT FALSE",
+                "registration_invite_code_hash": "VARCHAR(255)",
+                "contest_started": "BOOLEAN NOT NULL DEFAULT FALSE",
+                "contest_ended": "BOOLEAN NOT NULL DEFAULT FALSE",
+                "contest_starts_at": "TIMESTAMP WITH TIME ZONE",
+                "contest_ends_at": "TIMESTAMP WITH TIME ZONE",
+            },
+        )
+        add_columns(
+            "services",
+            {
+                "repository_id": "INTEGER",
+                "repository_path": "VARCHAR(255)",
+                "jury_repository_id": "INTEGER",
+                "jury_repository_path": "VARCHAR(255)",
+                "validation_status": "VARCHAR(7) NOT NULL DEFAULT 'pending'",
+                "validation_message": (
+                    "TEXT NOT NULL DEFAULT "
+                    "'Repository contract has not been validated.'"
+                ),
+                "repository_generation": "INTEGER NOT NULL DEFAULT 0",
+                "validated_source_commit": "VARCHAR(64)",
+                "validated_jury_commit": "VARCHAR(64)",
+                "container_port": "INTEGER",
+                "healthcheck_path": "VARCHAR(512)",
+                "validated_at": "TIMESTAMP WITH TIME ZONE",
+                "runtime_status": "VARCHAR(7) NOT NULL DEFAULT 'pending'",
+                "runtime_message": (
+                    "TEXT NOT NULL DEFAULT 'Runtime check has not been started.'"
+                ),
+                "runtime_log": "TEXT NOT NULL DEFAULT ''",
+                "runtime_matches": "INTEGER NOT NULL DEFAULT 0",
+                "runtime_source_commit": "VARCHAR(64)",
+                "runtime_jury_commit": "VARCHAR(64)",
+                "runtime_checked_at": "TIMESTAMP WITH TIME ZONE",
+            },
+        )
+        add_columns(
+            "users",
+            {
+                "ssh_public_key": "VARCHAR(2048)",
+                "git_ssh_key_id": "INTEGER",
+                "gitea_user_id": "INTEGER",
+                "gitea_username": "VARCHAR(32)",
+            },
+        )
+        add_columns(
+            "branding_settings",
+            {
+                "homepage_html": "TEXT NOT NULL DEFAULT ''",
+                "started_homepage_html": "TEXT NOT NULL DEFAULT ''",
+                "ended_homepage_html": "TEXT NOT NULL DEFAULT ''",
+            },
+        )
+        palette_defaults = {
+            "success_color": "#287455",
+            "success_soft_color": "#EEF6F1",
+            "warning_color": "#9A6700",
+            "warning_soft_color": "#FFF8C5",
+            "focus_color": "#2563EB",
+            "button_color": "#172033",
+            "button_hover_color": "#354052",
+            "button_text_color": "#FFFFFF",
+            "input_color": "#FFFFFF",
+            "input_disabled_color": "#FAFBFC",
+            "table_heading_color": "#FAFBFC",
+            "table_hover_color": "#FAFBFC",
+            "table_selected_color": "#F3F6FA",
+            "header_color": "#FFFFFF",
+            "header_text_color": "#111827",
+            "header_link_color": "#6B7280",
+            "header_link_hover_color": "#111827",
+            "home_color": "#FFFFFF",
+            "home_title_color": "#111827",
+            "home_text_color": "#6B7280",
+            "home_link_color": "#4B5563",
+            "home_link_hover_color": "#111827",
+            "footer_text_color": "#9CA3AF",
+            "footer_hover_color": "#6B7280",
+        }
+        add_columns(
+            "palette_settings",
+            {
+                name: f"VARCHAR(7) NOT NULL DEFAULT '{default}'"
+                for name, default in palette_defaults.items()
+            },
+        )
+        add_columns(
+            "repository_events",
+            {
+                "attempts": "INTEGER NOT NULL DEFAULT 0",
+                "message": "TEXT NOT NULL DEFAULT ''",
+                "processing_token": "VARCHAR(64)",
+                "processing_started_at": "TIMESTAMP WITH TIME ZONE",
+            },
+        )
+        add_columns(
+            "scoring_settings",
+            {
+                "attack_requirements": "TEXT NOT NULL DEFAULT ''",
+                "allow_user_attack_requirements": (
+                    "BOOLEAN NOT NULL DEFAULT FALSE"
+                ),
+            },
+        )
+
+        schema = inspect(connection)
+        service_columns = {
+            column["name"] for column in schema.get_columns("services")
+        }
+        for old_name, new_name in {
+            "gitlab_project_id": "repository_id",
+            "gitlab_project_path": "repository_path",
+            "jury_project_id": "jury_repository_id",
+            "jury_project_path": "jury_repository_path",
+        }.items():
+            if old_name in service_columns:
+                connection.execute(
+                    text(
+                        f"UPDATE services SET {new_name} = {old_name} "
+                        f"WHERE {new_name} IS NULL"
+                    )
+                )
+        user_columns = {
+            column["name"] for column in schema.get_columns("users")
+        }
+        if "gitlab_ssh_key_id" in user_columns:
+            connection.execute(
+                text(
+                    "UPDATE users SET git_ssh_key_id = gitlab_ssh_key_id "
+                    "WHERE git_ssh_key_id IS NULL"
+                )
+            )
+
+        connection.execute(
+            text(
+                "ALTER TABLE repository_events "
+                "DROP CONSTRAINT IF EXISTS repository_event_status"
+            )
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE repository_events ADD CONSTRAINT "
+                "repository_event_status CHECK (status IN "
+                "('pending', 'processing', 'done', 'failed'))"
+            )
+        )
+        for index_sql in (
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_services_repository_id "
+            "ON services (repository_id) WHERE repository_id IS NOT NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_services_repository_path "
+            "ON services (repository_path) WHERE repository_path IS NOT NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_services_jury_repository_id "
+            "ON services (jury_repository_id) WHERE jury_repository_id IS NOT NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_services_jury_repository_path "
+            "ON services (jury_repository_path) WHERE jury_repository_path IS NOT NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_git_ssh_key_id "
+            "ON users (git_ssh_key_id) WHERE git_ssh_key_id IS NOT NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_gitea_user_id "
+            "ON users (gitea_user_id) WHERE gitea_user_id IS NOT NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_gitea_username "
+            "ON users (gitea_username) WHERE gitea_username IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS ix_repository_events_processing_token "
+            "ON repository_events (processing_token)",
+        ):
+            connection.execute(text(index_sql))
+
         connection.execute(
             text(
                 "ALTER TABLE instance_config ADD COLUMN IF NOT EXISTS "

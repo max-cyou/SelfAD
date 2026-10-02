@@ -1,12 +1,11 @@
 import re
-from html import escape
 from dataclasses import dataclass
+from html import escape
 
 from sqlalchemy.orm import Session
 
 from selfad.contest import ENDED, STARTED, contest_state
 from selfad.models import BrandingSettings, InstanceConfig, PaletteSettings
-
 
 HEX_COLOR_PATTERN = re.compile(r"^#[0-9A-Fa-f]{6}$")
 

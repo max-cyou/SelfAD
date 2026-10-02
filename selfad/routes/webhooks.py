@@ -13,17 +13,16 @@ from selfad.contest import STARTED, contest_state, start_contest_if_due
 from selfad.database import get_session
 from selfad.models import (
     InstanceConfig,
+    ParticipantRepositoryStatus,
+    ParticipantService,
     RepositoryEvent,
     RepositoryEventStatus,
-    ParticipantService,
-    ParticipantRepositoryStatus,
     Service,
     ServiceRunStatus,
     ServiceStatus,
     ServiceValidationStatus,
 )
 from selfad.settings import get_gitea_webhook_secret
-
 
 router = APIRouter()
 

@@ -3,9 +3,9 @@ import unittest
 from unittest.mock import patch
 
 from selfad.runner import (
-    CommandResult,
     RUNNER_LABEL,
     RUNNER_USER,
+    CommandResult,
     _run_jury_script,
     _wait_for_healthcheck,
     cleanup_managed_runner_resources,
@@ -15,6 +15,16 @@ from selfad.settings import get_runner_settings
 
 
 class RunnerSecurityTests(unittest.TestCase):
+    def setUp(self):
+        self.instance_id = patch.dict(
+            os.environ,
+            {"SELFAD_RUNNER_INSTANCE_ID": "test-instance"},
+        )
+        self.instance_id.start()
+
+    def tearDown(self):
+        self.instance_id.stop()
+
     def test_internal_runner_is_opt_in(self):
         with patch.dict(
             os.environ,
@@ -102,6 +112,7 @@ class RunnerSecurityTests(unittest.TestCase):
         self.assertEqual(commands[2], ["image", "rm", "--force", "image-id"])
         for command in [call.args[0] for call in docker.call_args_list[1:]]:
             self.assertIn(f"label={RUNNER_LABEL}", command)
+            self.assertIn("label=selfad.instance=test-instance", command)
 
 
 if __name__ == "__main__":

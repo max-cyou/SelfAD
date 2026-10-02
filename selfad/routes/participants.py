@@ -1,6 +1,6 @@
+import re
 from collections import defaultdict
 from datetime import datetime, timezone
-import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -46,7 +46,6 @@ from selfad.settings import (
     get_rate_limit,
 )
 from selfad.web import templates
-
 
 router = APIRouter()
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")

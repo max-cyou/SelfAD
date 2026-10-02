@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from selfad.models import ParticipantService, ScoringSettings, SubmissionAttempt
 
-
 ATTACK = "attack"
 DEFENSE = "defense"
 REWARD_MODES = {"coverage", "per_flag"}

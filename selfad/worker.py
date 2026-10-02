@@ -11,10 +11,10 @@ from selfad.database import SessionLocal
 from selfad.gitea import GiteaError
 from selfad.models import (
     InstanceConfig,
-    RepositoryEvent,
-    RepositoryEventStatus,
     ParticipantRepositoryStatus,
     ParticipantService,
+    RepositoryEvent,
+    RepositoryEventStatus,
     Service,
     ServiceRunStatus,
     ServiceStatus,
@@ -35,7 +35,6 @@ from selfad.scoring import (
 )
 from selfad.service_contract import ServiceContractResult, validate_service_contract
 from selfad.settings import get_gitea_settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -455,6 +454,7 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
         ) if is_attack else False
 
     import hashlib
+
     from selfad.gitea import get_repository_file
 
     settings = get_gitea_settings()

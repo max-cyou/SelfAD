@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import DateTime, Enum as SqlEnum, String, Text
+from sqlalchemy import DateTime, String, Text
+from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
 from selfad.database import Base

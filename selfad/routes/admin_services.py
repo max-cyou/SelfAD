@@ -40,7 +40,6 @@ from selfad.routes.admin_shared import (
 from selfad.scoring import get_scoring_settings
 from selfad.settings import get_gitea_settings, get_gitea_webhook_secret
 
-
 router = APIRouter()
 
 

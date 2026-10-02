@@ -1,7 +1,6 @@
 import unittest
 from pathlib import Path
 
-
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 
 
@@ -16,6 +15,8 @@ class GiteaHardeningTests(unittest.TestCase):
             "GITEA__repository__upload__ENABLED=false",
             "GITEA__attachment__ENABLED=false",
             "GITEA__packages__ENABLED=false",
+            "GITEA__service__ENABLE_CAPTCHA=true",
+            "GITEA__service__REQUIRE_CAPTCHA_FOR_LOGIN=true",
         ):
             self.assertIn(setting, dockerfile)
 

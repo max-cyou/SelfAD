@@ -1,7 +1,6 @@
 import unittest
 from pathlib import Path
 
-
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 
 
@@ -13,6 +12,8 @@ class DockerignoreTests(unittest.TestCase):
         self.assertIn("\n*\n", dockerignore)
         for allowed_path in (
             "!Dockerfile",
+            "!alembic.ini",
+            "!migrations/**",
             "!requirements.txt",
             "!main.py",
             "!selfad/**",
