@@ -46,10 +46,11 @@ sudo systemctl restart docker
 From the control plane, verify the client bundle before starting SelfAD:
 
 ```bash
-DOCKER_HOST=tcp://runner-1.internal:2376 \
-DOCKER_TLS_VERIFY=1 \
-DOCKER_CERT_PATH=/srv/selfad/runner-1-tls/control-plane \
-docker version
+sudo env \
+  DOCKER_HOST=tcp://runner-1.internal:2376 \
+  DOCKER_TLS_VERIFY=1 \
+  DOCKER_CERT_PATH=/srv/selfad/runner-1-tls/control-plane \
+  docker version
 ```
 
 Never expose port `2376` without TLS. Firewall it so only the control-plane IP
@@ -63,16 +64,27 @@ equivalent cloud/nftables firewall rule.
 
 ```bash
 SELFAD_RUNNER_FIREWALL_CONFIRMED=true \
-  sudo ./scripts/event/runner-install.sh /path/to/runner 2.26.125.223
+  sudo ./scripts/event/runner-install.sh /path/to/runner 10.0.0.10
 ```
 
 Use `SELFAD_RUNNER_FIREWALL_CONFIRMED=true` only after configuring an external
-firewall to allow `2.26.125.223/tcp:2376` and deny every other source.
+firewall to allow only the control plane (for example `10.0.0.10`) to reach
+runner TCP port `2376`, and deny every other source.
 
 ## 3. Connect the control plane
 
 Copy the `control-plane` directory (not `ca-key.pem`) to the public control
-plane as `/opt/selfad/runner-tls`, mode `0700`. In `/opt/selfad/.env`, set:
+plane as `/opt/selfad/runner-tls`. The SelfAD process uses the fixed container
+UID `10001`, so make the bundle readable only by that UID:
+
+```bash
+sudo chown -R 10001:10001 /opt/selfad/runner-tls
+sudo chmod 0700 /opt/selfad/runner-tls
+sudo chmod 0600 /opt/selfad/runner-tls/key.pem
+sudo chmod 0644 /opt/selfad/runner-tls/ca.pem /opt/selfad/runner-tls/cert.pem
+```
+
+In `/opt/selfad/.env`, set:
 
 ```dotenv
 SELFAD_RUNNER_DOCKER_HOST=tcp://runner-1.internal:2376
@@ -84,8 +96,8 @@ Then rebuild/restart only SelfAD and check readiness:
 
 ```bash
 cd /opt/selfad
-docker-compose --env-file .env -f deploy/luna/compose.yaml up -d selfad
-curl --fail https://luna.maxcyou.ru/ready
+docker compose -f docker-compose.production.yml up -d --build selfad
+curl --fail https://ctf.example/ready
 ```
 
 The response must contain `"runner":true` and `"runner_mode":"external"`.

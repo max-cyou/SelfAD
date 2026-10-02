@@ -57,6 +57,7 @@ webhooks, runs the checks and updates the scoreboard.
 
 - [Quick Start](#quick-start)
 - [Choose a Deployment](#choose-a-deployment)
+- [Two-machine Public Deployment](#two-machine-public-deployment)
 - [Domain and HTTPS](#domain-and-https)
 - [How It Works](#how-it-works)
 - [Competition Lifecycle](#competition-lifecycle)
@@ -189,6 +190,317 @@ Caddy / nginx :443
 The control plane must not be privileged and must not mount a Docker socket.
 See [Production Deployment](docs/production.md) and
 [Runner Host](docs/runner-host.md).
+
+## Two-machine Public Deployment
+
+This is the copy-and-paste path for a public event. It assumes two fresh
+Ubuntu 24.04 servers connected by a private network:
+
+| Name | Example address | Purpose |
+|---|---|---|
+| Control plane | public `203.0.113.10`, private `10.0.0.10` | SelfAD, Gitea, PostgreSQL and Caddy |
+| Runner | private `10.0.0.20` | Builds and executes participant code |
+
+Replace the example domains and addresses below with your real values. Do not
+put unrelated services or persistent tournament data on the runner.
+
+### 1. Prepare DNS and firewalls
+
+Create these DNS records, both pointing to the **public control-plane IP**:
+
+```text
+ctf.example      A/AAAA -> 203.0.113.10
+git.ctf.example  A/AAAA -> 203.0.113.10
+```
+
+Allow inbound traffic as follows:
+
+| Host | Port | Allowed source |
+|---|---|---|
+| Control plane | TCP 22 | your administration IP |
+| Control plane | TCP 80, TCP/UDP 443 | internet |
+| Control plane | TCP 2224 | participants |
+| Runner | TCP 22 | your administration IP |
+| Runner | TCP 2376 | **only `10.0.0.10`** |
+
+Never expose runner port `2376` to the internet or route it through Caddy.
+The runner needs outbound access to the container registries and package
+mirrors used by service Dockerfiles.
+
+### 2. Install the host packages
+
+Run on the **control plane**:
+
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose-v2 git openssl
+sudo systemctl enable --now docker
+sudo docker version
+sudo docker compose version
+```
+
+Run on the **runner**:
+
+```bash
+sudo apt update
+sudo apt install -y docker.io
+sudo systemctl enable --now docker
+sudo docker version
+```
+
+If the distribution does not provide `docker-compose-v2`, install Docker
+Engine and its Compose plugin from Docker's official repository. Do not use
+the obsolete Python `docker-compose` package.
+
+### 3. Download SelfAD on the control plane
+
+```bash
+sudo git clone https://github.com/max-cyou/SelfAD.git /opt/selfad
+sudo chown -R "$USER":"$USER" /opt/selfad
+cd /opt/selfad
+```
+
+All remaining control-plane commands assume the current directory is
+`/opt/selfad`.
+
+### 4. Create runner TLS credentials
+
+On the **control plane**, use the exact private DNS name or IP that SelfAD will
+use to contact the runner:
+
+```bash
+sudo install -d -o "$USER" -g "$USER" /srv/selfad
+
+./scripts/event/runner-init-tls.sh \
+  /srv/selfad/runner-1-tls \
+  10.0.0.20 \
+  selfad-control
+```
+
+The command deliberately refuses to overwrite an existing directory. It
+creates:
+
+```text
+/srv/selfad/runner-1-tls/
+├── runner/          # server certificate: send to the runner
+├── control-plane/   # client certificate: keep on the control plane
+├── ca.pem
+└── ca-key.pem       # copy offline, then remove from both live servers
+```
+
+Copy only the runner bundle and installer to the **runner**. Replace `admin`
+with the runner's SSH user:
+
+```bash
+scp -r /srv/selfad/runner-1-tls/runner \
+  admin@10.0.0.20:/tmp/selfad-runner-tls
+
+scp scripts/event/runner-install.sh \
+  admin@10.0.0.20:/tmp/runner-install.sh
+```
+
+Back up `ca-key.pem` offline before deleting it from the control plane. It is
+not required during normal operation.
+
+### 5. Lock down and configure the runner
+
+Connect to the **runner**:
+
+```bash
+ssh admin@10.0.0.20
+```
+
+If UFW is used, allow SSH before enabling it so that the current session does
+not become the last usable one:
+
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow OpenSSH
+sudo ufw --force enable
+```
+
+Install the Docker TLS listener. The final argument is the control plane's
+**private** IP:
+
+```bash
+chmod +x /tmp/runner-install.sh
+sudo /tmp/runner-install.sh /tmp/selfad-runner-tls 10.0.0.10
+```
+
+The installer refuses a machine that already contains Docker containers. It
+also adds a UFW rule allowing port `2376` only from `10.0.0.10`. If an external
+cloud firewall is used instead of active UFW, create that restriction first,
+then run:
+
+```bash
+sudo SELFAD_RUNNER_FIREWALL_CONFIRMED=true \
+  /tmp/runner-install.sh /tmp/selfad-runner-tls 10.0.0.10
+```
+
+Remove the transfer copy after installation:
+
+```bash
+sudo rm -rf /tmp/selfad-runner-tls /tmp/runner-install.sh
+exit
+```
+
+The deletion targets above are fixed runner setup paths. Do not substitute a
+broad directory such as `/tmp` or a variable whose value has not been checked.
+
+### 6. Test runner access from the control plane
+
+Back on the **control plane**:
+
+```bash
+sudo env \
+  DOCKER_HOST=tcp://10.0.0.20:2376 \
+  DOCKER_TLS_VERIFY=1 \
+  DOCKER_CERT_PATH=/srv/selfad/runner-1-tls/control-plane \
+  docker version
+```
+
+The output must show both `Client` and `Server`. A timeout means the private
+route or firewall is wrong. `x509` errors mean the address does not match the
+certificate or the wrong bundle was copied.
+
+Optionally verify the job restrictions before starting SelfAD:
+
+```bash
+SELFAD_RUNNER_DOCKER_HOST=tcp://10.0.0.20:2376 \
+SELFAD_RUNNER_CERT_PATH=/srv/selfad/runner-1-tls/control-plane \
+  ./scripts/event/runner-isolation-check.sh
+```
+
+The final line must be `egress_blocked`.
+
+Give the container's unprivileged SelfAD user access to the client bundle. UID
+`10001` is fixed by the project Dockerfile:
+
+```bash
+sudo chown -R 10001:10001 /srv/selfad/runner-1-tls/control-plane
+sudo chmod 0700 /srv/selfad/runner-1-tls/control-plane
+sudo chmod 0600 /srv/selfad/runner-1-tls/control-plane/key.pem
+sudo chmod 0644 \
+  /srv/selfad/runner-1-tls/control-plane/ca.pem \
+  /srv/selfad/runner-1-tls/control-plane/cert.pem
+```
+
+### 7. Create the production configuration
+
+On the **control plane**:
+
+```bash
+cd /opt/selfad
+cp .env.production.example .env
+
+sed -i \
+  -e "s|^SELFAD_POSTGRES_PASSWORD=.*|SELFAD_POSTGRES_PASSWORD=$(openssl rand -hex 32)|" \
+  -e "s|^SELFAD_SECRET_KEY=.*|SELFAD_SECRET_KEY=$(openssl rand -hex 32)|" \
+  -e "s|^SELFAD_METRICS_TOKEN=.*|SELFAD_METRICS_TOKEN=$(openssl rand -hex 32)|" \
+  -e "s|^SELFAD_SETUP_TOKEN=.*|SELFAD_SETUP_TOKEN=$(openssl rand -hex 32)|" \
+  -e 's|^SELFAD_RUNNER_DOCKER_HOST=.*|SELFAD_RUNNER_DOCKER_HOST=tcp://10.0.0.20:2376|' \
+  -e 's|^SELFAD_RUNNER_TLS_DIR=.*|SELFAD_RUNNER_TLS_DIR=/srv/selfad/runner-1-tls/control-plane|' \
+  -e 's|^SELFAD_PUBLIC_DOMAIN=.*|SELFAD_PUBLIC_DOMAIN=ctf.example|' \
+  -e 's|^SELFAD_GITEA_PUBLIC_URL=.*|SELFAD_GITEA_PUBLIC_URL=https://git.ctf.example|' \
+  -e 's|^SELFAD_GITEA_DOMAIN=.*|SELFAD_GITEA_DOMAIN=git.ctf.example|' \
+  -e 's|^SELFAD_GITEA_SSH_DOMAIN=.*|SELFAD_GITEA_SSH_DOMAIN=git.ctf.example|' \
+  .env
+
+chmod 0600 .env
+sudo docker compose -f docker-compose.production.yml config --quiet
+```
+
+Before continuing, inspect `.env` and confirm that no `replace-with-...` value
+remains and all domains/IPs are yours:
+
+```bash
+grep -nE 'replace-with|example|SELFAD_RUNNER_DOCKER_HOST|SELFAD_.*DOMAIN' .env
+```
+
+An empty `replace-with` result is required. Seeing your real domain and runner
+address in the remaining lines is expected.
+
+### 8. Open the control-plane firewall and start
+
+If UFW is used on the **control plane**:
+
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 443/udp
+sudo ufw allow 2224/tcp
+sudo ufw --force enable
+```
+
+Start the production stack:
+
+```bash
+sudo docker compose -f docker-compose.production.yml up -d --build
+sudo docker compose -f docker-compose.production.yml ps
+```
+
+Caddy obtains certificates automatically. If a container is unhealthy, do
+not continue to setup; inspect it first:
+
+```bash
+sudo docker compose -f docker-compose.production.yml logs --tail=200
+```
+
+### 9. Perform first setup
+
+Display the setup token locally on the control plane:
+
+```bash
+grep '^SELFAD_SETUP_TOKEN=' .env
+```
+
+Open this URL in a private browser window, substituting that value:
+
+```text
+https://ctf.example/setup?setup_token=PASTE_THE_TOKEN_HERE
+```
+
+Create the organiser account and finish setup. Close the private window when
+done. Never send the setup token through chat or place it in documentation.
+
+### 10. Verify before registration opens
+
+Check basic readiness:
+
+```bash
+curl --fail --silent --show-error https://ctf.example/ready
+```
+
+The response must include:
+
+```json
+{"status":"ok","database":true,"gitea":true,"runner":true,"runner_mode":"external"}
+```
+
+Run the complete preflight using the token from `.env`:
+
+```bash
+SELFAD_METRICS_TOKEN="$(sed -n 's/^SELFAD_METRICS_TOKEN=//p' .env)" \
+  ./scripts/event/event-preflight.sh https://ctf.example
+```
+
+Do not open registration unless it prints:
+
+```text
+Preflight passed: https://ctf.example is ready with external runner.
+```
+
+Finally, create a throwaway participant and push a known vulnerable service,
+an exploit and a one-line fix through the real Git SSH path. With one runner,
+keep `SELFAD_WORKER_CONCURRENCY=1` until measured load proves that the runner
+can safely process more simultaneous checks.
+
+After the event, archive the control-plane data and rebuild or destroy the
+runner VM. Treat it as compromised after it has executed participant code.
 
 ## Domain and HTTPS
 
