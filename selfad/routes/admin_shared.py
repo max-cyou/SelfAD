@@ -34,7 +34,7 @@ from selfad.web import templates
 
 SERVICE_SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$")
-USERS_PAGE_SIZE = 20
+USERS_PAGE_SIZE = 10
 MAX_ATTACK_REQUIREMENTS_BYTES = 64 * 1024
 
 DEFAULT_SERVICE_FORM = {
