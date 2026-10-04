@@ -192,7 +192,11 @@ def record_submission_score(
         player.defense_penalty_attempts = (
             previous_penalty_attempts + int(penalty_eligible)
         )
-    if awarded_score > 0:
+    # The tie-break timestamp must describe when the currently stored score
+    # was reached. A raw-score improvement can still award fewer points than
+    # the stored best after penalties, so do not move the timestamp unless the
+    # participant's effective score actually increases.
+    if awarded_score > current_score:
         now = datetime.now(timezone.utc)
         if player.first_awarded_at is None:
             player.first_awarded_at = now

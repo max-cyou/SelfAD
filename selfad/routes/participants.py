@@ -67,8 +67,8 @@ def _scoreboard_time(value: datetime | None) -> float:
 def _scoreboard_sort_key(row: dict[str, object]) -> tuple[object, ...]:
     return (
         -int(row["score"]),
-        _scoreboard_time(row["first_solution_at"]),
         _scoreboard_time(row["last_solution_at"]),
+        _scoreboard_time(row["first_solution_at"]),
         str(row["username"]),
     )
 
