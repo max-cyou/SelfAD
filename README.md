@@ -789,8 +789,9 @@ packages, hashes and an internal package mirror for public events.
 - stdout noise: `ignore`, `unsuccessful`, or `percent_penalty`.
 
 Scoreboard ordering: total score, earliest time the current score was reached,
-earliest first solution, username. Equal scores share a rank; zero-point users
-are hidden.
+earliest first solution, username. Places are always unique and sequential;
+the tie-breakers determine the order for equal scores. Zero-point users are
+hidden.
 
 ## Security Model
 

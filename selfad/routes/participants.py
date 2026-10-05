@@ -73,6 +73,11 @@ def _scoreboard_sort_key(row: dict[str, object]) -> tuple[object, ...]:
     )
 
 
+def _assign_scoreboard_ranks(rows: list[dict[str, object]]) -> None:
+    for rank, row in enumerate(rows, start=1):
+        row["rank"] = rank
+
+
 def participant_access(
     request: Request,
     session: Session,
@@ -233,13 +238,7 @@ def render_scoreboard(
         if totals[user_id]["attack"] + totals[user_id]["defense"] >= 1
     ]
     rows.sort(key=_scoreboard_sort_key)
-    previous_score: int | None = None
-    current_rank = 0
-    for index, row in enumerate(rows, start=1):
-        if row["score"] != previous_score:
-            current_rank = index
-            previous_score = row["score"]
-        row["rank"] = current_rank
+    _assign_scoreboard_ranks(rows)
 
     return templates.TemplateResponse(
         request=request,
