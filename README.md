@@ -5,6 +5,7 @@
 ### A self-hosted Attack-Defense CTF platform for building, breaking and patching real services
 
 [![Tests](https://github.com/max-cyou/SelfAD/actions/workflows/tests.yml/badge.svg)](https://github.com/max-cyou/SelfAD/actions/workflows/tests.yml)
+[![Version: 0.1.0](https://img.shields.io/badge/version-0.1.0-6f42c1.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22a06b.svg)](LICENSE)
 [![Python 3.11 | 3.14](https://img.shields.io/badge/python-3.11%20%7C%203.14-3776ab.svg)](requirements.txt)
 [![Docker Compose](https://img.shields.io/badge/deploy-Docker%20Compose-2496ed.svg)](compose.yaml)
@@ -1033,6 +1034,7 @@ large Docker contexts can be much slower than the reference service.
 
 ## Project Status
 
+- current release: **0.1.0**;
 - MIT licensed;
 - CI runs the test suite on Python 3.11 and 3.14;
 - CI also checks Ruff, mypy, dependency advisories, PostgreSQL migrations,

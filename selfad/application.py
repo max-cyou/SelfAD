@@ -9,6 +9,7 @@ from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
+from selfad import __version__
 from selfad.database import (
     DATABASE_URL,
     SessionLocal,
@@ -159,7 +160,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="SelfAD", lifespan=lifespan)
+    app = FastAPI(title="SelfAD", version=__version__, lifespan=lifespan)
 
     @app.middleware("http")
     async def security_headers(request, call_next):
