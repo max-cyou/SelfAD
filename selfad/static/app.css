@@ -1388,6 +1388,10 @@ td > strong {
   color: var(--success);
 }
 
+.table-state--ready_to_issue {
+  color: var(--warning);
+}
+
 .table-state--draft, .key-state--missing {
   color: var(--muted);
 }

@@ -414,7 +414,7 @@ def validate_service_form(
         errors["default_branch"] = "Enter a valid Git branch name."
 
     if values["status"] not in {item.value for item in ServiceStatus}:
-        errors["status"] = "Select draft or active."
+        errors["status"] = "Select draft, ready to issue, or active."
 
     ssh_public_key = values["ssh_public_key"]
     if require_ssh_key and not ssh_public_key:

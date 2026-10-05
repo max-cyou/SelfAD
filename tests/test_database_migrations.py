@@ -39,7 +39,17 @@ class DatabaseMigrationTests(unittest.TestCase):
                     version = connection.scalar(
                         text("SELECT version_num FROM alembic_version")
                     )
-                self.assertEqual(version, "0001")
+                self.assertEqual(version, "0002")
+                service_checks = {
+                    check["name"]: check["sqltext"]
+                    for check in schema.get_check_constraints("services")
+                }
+                self.assertIn("ready_to_issue", service_checks["service_status"])
+                service_columns = {
+                    column["name"]: column
+                    for column in schema.get_columns("services")
+                }
+                self.assertEqual(service_columns["status"]["type"].length, 14)
             finally:
                 engine.dispose()
 
@@ -72,7 +82,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     version = connection.scalar(
                         text("SELECT version_num FROM alembic_version")
                     )
-                self.assertEqual(version, "0001")
+                self.assertEqual(version, "0002")
             finally:
                 engine.dispose()
 

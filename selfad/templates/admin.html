@@ -344,7 +344,7 @@
                                 <small>{{ issued_counts.get(service.id, 0) }} issued</small>
                               </td>
                               <td><code>{{ service.slug }}</code></td>
-                              <td><span class="table-state table-state--{{ service.status.value }}">{{ service.status.value }}</span></td>
+                              <td><span class="table-state table-state--{{ service.status.value }}">{{ service.status.value | replace('_', ' ') }}</span></td>
                               <td>
                                 <div class="repo-pair">
                                   <a href="{{ gitea_public_url }}/{{ service.repository_path }}" target="_blank" rel="noopener noreferrer">service ↗</a>
@@ -371,10 +371,10 @@
                               </td>
                               <td>
                                 <div class="table-actions">
-                                  {% if service.status.value == 'active' and service.runtime_status.value == 'passed' %}
+                                  {% if service.status.value == 'ready_to_issue' and service.runtime_status.value == 'passed' %}
                                     <form method="post" action="{{ url_for('issue_participant_repositories', service_id=service.id) }}">
                                       <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
-                                      <button type="submit">Issue</button>
+                                      <button type="submit">Issue privately</button>
                                     </form>
                                   {% endif %}
                                   <form method="post" action="{{ url_for('validate_service', service_id=service.id) }}">
@@ -463,9 +463,10 @@
                         <label for="service-status">Status</label>
                         <select id="service-status" name="status" required>
                           <option value="draft"{% if service_form.status == 'draft' %} selected{% endif %}>Draft</option>
-                          <option value="active" data-active-status{% if service_form.status == 'active' %} selected{% endif %}{% if not service_edit_id %} disabled{% endif %}>Active</option>
+                          <option value="ready_to_issue" data-publish-status{% if service_form.status == 'ready_to_issue' %} selected{% endif %}{% if not service_edit_id %} disabled{% endif %}>Ready to issue</option>
+                          <option value="active" data-publish-status{% if service_form.status == 'active' %} selected{% endif %}{% if not service_edit_id %} disabled{% endif %}>Active</option>
                         </select>
-                        <small>{{ service_errors.get('status') or 'Activation requires a passing contract and runtime check.' }}</small>
+                        <small>{{ service_errors.get('status') or 'Ready requires passing checks. Issue privately, then activate to publish access.' }}</small>
                       </div>
 
                       <div class="field service-field--wide{% if service_errors.get('description') %} field--error{% endif %}">

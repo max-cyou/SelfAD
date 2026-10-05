@@ -34,7 +34,7 @@ class PostgreSQLMigrationTests(unittest.TestCase):
         with engine.connect() as connection:
             self.assertEqual(
                 connection.scalar(text("SELECT version_num FROM alembic_version")),
-                "0001",
+                "0002",
             )
 
     def test_fresh_postgresql_database_reaches_head(self):
@@ -65,6 +65,10 @@ class PostgreSQLMigrationTests(unittest.TestCase):
         initialize_database()
         self._assert_at_head()
         schema = inspect(engine)
+        service_columns = {
+            item["name"]: item for item in schema.get_columns("services")
+        }
+        self.assertEqual(service_columns["status"]["type"].length, 14)
         for table, column in (
             ("instance_config", "registration_enabled"),
             ("services", "runtime_status"),

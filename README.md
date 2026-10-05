@@ -625,14 +625,21 @@ transitions.
 
 ### Organiser workflow
 
+Service publication follows `draft -> ready to issue -> active`. Issuing is a
+preparation step: repositories stay private until activation, so sequential
+repository creation does not give early participants extra solving time.
+
 1. Complete `/setup` and create the organiser account.
 2. Create a service in Admin; SelfAD creates source and jury repositories.
 3. Push service code and jury scripts.
 4. Press **Validate**. Static contract checks and the full runtime check must
    pass.
-5. Activate and issue the service to participants.
-6. Configure registration, optional invite code, schedule and scoring.
-7. Run a participant-path smoke test before announcing the event.
+5. Move the service to **Ready to issue** and press **Issue privately**.
+   SelfAD prepares every participant repository without granting access.
+6. Move the fully issued service to **Active**. Repository permissions are
+   granted concurrently and the service becomes visible on the platform.
+7. Configure registration, optional invite code, schedule and scoring.
+8. Run a participant-path smoke test before announcing the event.
 
 ### Participant workflow
 

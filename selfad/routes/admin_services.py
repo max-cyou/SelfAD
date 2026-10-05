@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -16,7 +17,6 @@ from selfad.gitea import (
     GiteaUnavailable,
     delete_repository,
     provision_service,
-    replace_repository_file,
 )
 from selfad.models import (
     ParticipantService,
@@ -26,8 +26,11 @@ from selfad.models import (
     ServiceValidationStatus,
     User,
 )
-from selfad.participants import provision_participant_service
-from selfad.repository_readmes import issued_service_readme
+from selfad.participants import (
+    grant_participant_service_access,
+    provision_participant_service,
+    revoke_participant_service_access,
+)
 from selfad.routes.admin_shared import (
     add_service_uniqueness_errors,
     apply_validation_result,
@@ -41,6 +44,88 @@ from selfad.scoring import get_scoring_settings
 from selfad.settings import get_gitea_settings, get_gitea_webhook_secret
 
 router = APIRouter()
+
+
+def _participant_access_rows(
+    session: Session,
+    service: Service,
+) -> list[tuple[ParticipantService, User]]:
+    return list(
+        session.execute(
+            select(ParticipantService, User)
+            .join(User, User.id == ParticipantService.user_id)
+            .where(ParticipantService.service_id == service.id)
+            .order_by(ParticipantService.user_id)
+        ).all()
+    )
+
+
+async def _change_participant_repository_access(
+    session: Session,
+    service: Service,
+    *,
+    grant: bool,
+) -> str | None:
+    settings = get_gitea_settings()
+    rows = _participant_access_rows(session, service)
+    action = (
+        grant_participant_service_access
+        if grant
+        else revoke_participant_service_access
+    )
+    rollback_action = (
+        revoke_participant_service_access
+        if grant
+        else grant_participant_service_access
+    )
+    results = await asyncio.gather(
+        *(
+            run_in_threadpool(
+                action,
+                settings,
+                service=service,
+                user=participant,
+                assignment=assignment,
+            )
+            for assignment, participant in rows
+        ),
+        return_exceptions=True,
+    )
+    failures = [result for result in results if isinstance(result, Exception)]
+    if not failures:
+        return None
+
+    await asyncio.gather(
+        *(
+            run_in_threadpool(
+                rollback_action,
+                settings,
+                service=service,
+                user=participant,
+                assignment=assignment,
+            )
+            for assignment, participant in rows
+        ),
+        return_exceptions=True,
+    )
+    verb = "publish" if grant else "hide"
+    return f"Could not {verb} every participant repository: {failures[0]}"
+
+
+def _unissued_participant_count(session: Session, service: Service) -> int:
+    participant_ids = set(
+        session.scalars(
+            select(User.id).where(User.gitea_username.is_not(None))
+        ).all()
+    )
+    issued_ids = set(
+        session.scalars(
+            select(ParticipantService.user_id).where(
+                ParticipantService.service_id == service.id
+            )
+        ).all()
+    )
+    return len(participant_ids - issued_ids)
 
 
 @router.post("/admin/services", response_class=HTMLResponse)
@@ -62,7 +147,7 @@ async def create_service(
         require_ssh_key=not bool(user.ssh_public_key),
     )
     add_service_uniqueness_errors(session, values, errors)
-    if values["status"] == ServiceStatus.ACTIVE.value:
+    if values["status"] != ServiceStatus.DRAFT.value:
         errors["status"] = "Create the repositories as draft, then add their files."
 
     settings = get_gitea_settings()
@@ -179,7 +264,19 @@ async def update_service(
         errors,
         exclude_id=service.id,
     )
-    if values["status"] == ServiceStatus.ACTIVE.value:
+    try:
+        target_status = ServiceStatus(values["status"])
+    except ValueError:
+        target_status = ServiceStatus.DRAFT
+    if (
+        target_status == ServiceStatus.ACTIVE
+        and service.status == ServiceStatus.DRAFT
+    ):
+        errors["status"] = "Move the service to ready to issue before activation."
+    if target_status in {
+        ServiceStatus.READY_TO_ISSUE,
+        ServiceStatus.ACTIVE,
+    }:
         expected_generation = service.repository_generation
         try:
             validation = await run_service_validation(service)
@@ -226,7 +323,7 @@ async def update_service(
             ):
                 service.status = ServiceStatus.DRAFT
                 errors["status"] = (
-                    "The automatic runtime check must pass before activation."
+                    "The automatic runtime check must pass before publication."
                 )
             session.commit()
     if errors:
@@ -241,15 +338,82 @@ async def update_service(
             status_code=422,
         )
 
+    access_transition: str | None = None
+    if (
+        target_status == ServiceStatus.ACTIVE
+        and service.status != ServiceStatus.ACTIVE
+    ):
+        missing_count = _unissued_participant_count(session, service)
+        if missing_count:
+            return render_admin(
+                request,
+                session,
+                user,
+                service_errors={
+                    "status": (
+                        f"Issue repositories before activation: "
+                        f"{missing_count} participant(s) are missing them."
+                    )
+                },
+                service_form=values,
+                service_edit_id=service.id,
+                active_section="services",
+                status_code=422,
+            )
+        access_error = await _change_participant_repository_access(
+            session,
+            service,
+            grant=True,
+        )
+        if access_error:
+            return render_admin(
+                request,
+                session,
+                user,
+                service_errors={"_form": access_error},
+                service_form=values,
+                service_edit_id=service.id,
+                active_section="services",
+                status_code=502,
+            )
+        access_transition = "granted"
+    elif (
+        service.status == ServiceStatus.ACTIVE
+        and target_status != ServiceStatus.ACTIVE
+    ):
+        access_error = await _change_participant_repository_access(
+            session,
+            service,
+            grant=False,
+        )
+        if access_error:
+            return render_admin(
+                request,
+                session,
+                user,
+                service_errors={"_form": access_error},
+                service_form=values,
+                service_edit_id=service.id,
+                active_section="services",
+                status_code=502,
+            )
+        access_transition = "revoked"
+
     service.name = values["name"]
     service.slug = values["slug"]
     service.description = values["description"]
     service.default_branch = values["default_branch"]
-    service.status = ServiceStatus(values["status"])
+    service.status = target_status
     try:
         session.commit()
     except IntegrityError:
         session.rollback()
+        if access_transition:
+            await _change_participant_repository_access(
+                session,
+                service,
+                grant=access_transition == "revoked",
+            )
         return render_admin(
             request,
             session,
@@ -377,8 +541,23 @@ async def issue_participant_repositories(
     service = session.get(Service, service_id)
     if service is None:
         raise HTTPException(status_code=404, detail="Service not found.")
-    if service.status != ServiceStatus.ACTIVE or service.runtime_status != ServiceRunStatus.PASSED:
-        return render_admin(request, session, user, service_errors={"_form": "Activate the service only after its runtime check passes."}, active_section="services", status_code=422)
+    if (
+        service.status != ServiceStatus.READY_TO_ISSUE
+        or service.runtime_status != ServiceRunStatus.PASSED
+    ):
+        return render_admin(
+            request,
+            session,
+            user,
+            service_errors={
+                "_form": (
+                    "Move the service to ready to issue only after its "
+                    "runtime check passes."
+                )
+            },
+            active_section="services",
+            status_code=422,
+        )
     participants = session.scalars(
         select(User).where(User.gitea_username.is_not(None))
     ).all()
@@ -399,27 +578,10 @@ async def issue_participant_repositories(
                     scoring.allow_user_attack_requirements
                 ),
                 webhook_secret=get_gitea_webhook_secret(),
+                grant_access=False,
             )
         except (GiteaConflict, GiteaUnavailable, GiteaError) as error:
             return render_admin(request, session, user, service_errors={"_form": str(error)}, active_section="services", status_code=502)
         session.add(issued)
         session.commit()
-    if service.container_port is None or not service.repository_path:
-        return render_admin(request, session, user, service_errors={"_form": "Validated service runtime metadata is unavailable."}, active_section="services", status_code=502)
-    try:
-        await run_in_threadpool(
-            replace_repository_file,
-            settings,
-            service.repository_path,
-            "README.md",
-            content=issued_service_readme(
-                service.name,
-                service.slug,
-                service.container_port,
-            ),
-            branch=service.default_branch,
-            message="Replace author guide with local run instructions",
-        )
-    except (GiteaConflict, GiteaUnavailable, GiteaError) as error:
-        return render_admin(request, session, user, service_errors={"_form": str(error)}, active_section="services", status_code=502)
     return RedirectResponse(url="/admin#services", status_code=303)

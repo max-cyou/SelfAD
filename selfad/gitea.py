@@ -503,6 +503,30 @@ def add_repository_collaborator(
         raise GiteaUnavailable("Gitea could not grant repository access.") from error
 
 
+def remove_repository_collaborator(
+    settings: GiteaSettings,
+    repository_path: str,
+    *,
+    username: str,
+) -> None:
+    try:
+        owner, name = repository_path.split("/", 1)
+    except ValueError as error:
+        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
+    path = (
+        f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
+        f"/collaborators/{quote(username, safe='')}"
+    )
+    try:
+        _request(settings, "DELETE", path)
+    except _GiteaRequestError as error:
+        if error.status_code == 404:
+            return
+        if error.status_code in {401, 403}:
+            raise GiteaUnavailable("Gitea cannot revoke repository access.") from error
+        raise GiteaUnavailable("Gitea could not revoke repository access.") from error
+
+
 def add_user_ssh_key(
     settings: GiteaSettings,
     *,

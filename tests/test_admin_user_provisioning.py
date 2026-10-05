@@ -57,7 +57,18 @@ class AdminUserProvisioningTests(unittest.TestCase):
                 runtime_jury_commit="d" * 40,
                 container_port=8080,
             )
-            session.add_all((admin, active, draft))
+            ready = Service(
+                name="Ready service",
+                slug="ready-service",
+                repository_path="root/ready-service",
+                jury_repository_path="root/ready-service-jury",
+                status=ServiceStatus.READY_TO_ISSUE,
+                runtime_status=ServiceRunStatus.PASSED,
+                runtime_source_commit="1" * 40,
+                runtime_jury_commit="2" * 40,
+                container_port=8080,
+            )
+            session.add_all((admin, active, draft, ready))
             session.commit()
             session.refresh(admin)
             self.admin = admin

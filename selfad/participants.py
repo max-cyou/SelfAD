@@ -9,6 +9,7 @@ from selfad.gitea import (
     ensure_repository_webhook,
     get_repository_file,
     list_repository_files,
+    remove_repository_collaborator,
 )
 from selfad.models import ParticipantService, Service, User
 from selfad.repository_readmes import attack_readme
@@ -38,6 +39,7 @@ def provision_participant_service(
     attack_requirements: str,
     allow_user_attack_requirements: bool,
     webhook_secret: str,
+    grant_access: bool = True,
 ) -> ParticipantService:
     if (
         not user.gitea_username
@@ -122,16 +124,6 @@ def provision_participant_service(
         )
         if source_dockerfile is None:
             raise GiteaError("The service Dockerfile is unavailable.")
-        for repository_path, permission in (
-            (service.repository_path, "read"),
-            (attack.path, "write"),
-            (defense.path, "write"),
-        ):
-            owner = repository_path.split("/", 1)[0]
-            if owner != user.gitea_username:
-                add_repository_collaborator(
-                    settings, repository_path, username=user.gitea_username, permission=permission
-                )
         for repository_path in (attack.path, defense.path):
             ensure_repository_webhook(
                 settings,
@@ -149,7 +141,7 @@ def provision_participant_service(
                 pass
         raise
 
-    return ParticipantService(
+    assignment = ParticipantService(
         service_id=service.id,
         user_id=user.id,
         attack_repository_id=attack.id,
@@ -159,3 +151,75 @@ def provision_participant_service(
         attack_dockerfile_sha=hashlib.sha256(ATTACK_DOCKERFILE).hexdigest(),
         defense_dockerfile_sha=hashlib.sha256(source_dockerfile).hexdigest(),
     )
+    if grant_access:
+        try:
+            grant_participant_service_access(
+                settings,
+                service=service,
+                user=user,
+                assignment=assignment,
+            )
+        except GiteaError:
+            try:
+                revoke_participant_service_access(
+                    settings,
+                    service=service,
+                    user=user,
+                    assignment=assignment,
+                )
+            except GiteaError:
+                pass
+            for repository in (defense, attack):
+                try:
+                    delete_repository(settings, repository.path)
+                except GiteaError:
+                    pass
+            raise
+    return assignment
+
+
+def grant_participant_service_access(
+    settings: GiteaSettings,
+    *,
+    service: Service,
+    user: User,
+    assignment: ParticipantService,
+) -> None:
+    if not user.gitea_username or not service.repository_path:
+        raise GiteaError("Participant or service is not ready for publication.")
+    for repository_path, permission in (
+        (service.repository_path, "read"),
+        (assignment.attack_repository_path, "write"),
+        (assignment.defense_repository_path, "write"),
+    ):
+        owner = repository_path.split("/", 1)[0]
+        if owner != user.gitea_username:
+            add_repository_collaborator(
+                settings,
+                repository_path,
+                username=user.gitea_username,
+                permission=permission,
+            )
+
+
+def revoke_participant_service_access(
+    settings: GiteaSettings,
+    *,
+    service: Service,
+    user: User,
+    assignment: ParticipantService,
+) -> None:
+    if not user.gitea_username or not service.repository_path:
+        raise GiteaError("Participant or service is not ready for access revocation.")
+    for repository_path in (
+        service.repository_path,
+        assignment.attack_repository_path,
+        assignment.defense_repository_path,
+    ):
+        owner = repository_path.split("/", 1)[0]
+        if owner != user.gitea_username:
+            remove_repository_collaborator(
+                settings,
+                repository_path,
+                username=user.gitea_username,
+            )

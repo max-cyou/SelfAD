@@ -270,7 +270,9 @@
     serviceForm.elements.namedItem("default_branch").value = "main";
     serviceForm.elements.namedItem("default_branch").readOnly = false;
     serviceForm.elements.namedItem("status").value = "draft";
-    serviceForm.querySelector("[data-active-status]").disabled = true;
+    serviceForm.querySelectorAll("[data-publish-status]").forEach((option) => {
+      option.disabled = true;
+    });
     serviceForm.elements.namedItem("description").value = "";
     serviceFormTitle.textContent = "Create service";
     serviceFormDescription.textContent =
@@ -291,7 +293,9 @@
         button.dataset.defaultBranch;
       serviceForm.elements.namedItem("default_branch").readOnly = true;
       serviceForm.elements.namedItem("status").value = button.dataset.status;
-      serviceForm.querySelector("[data-active-status]").disabled = false;
+      serviceForm.querySelectorAll("[data-publish-status]").forEach((option) => {
+        option.disabled = false;
+      });
       serviceForm.elements.namedItem("description").value =
         button.dataset.description;
       serviceFormTitle.textContent = "Edit service";

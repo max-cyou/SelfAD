@@ -100,6 +100,7 @@ def initialize_database() -> None:
         _migrate_existing_sqlite_schema()
         _migrate_existing_postgresql_schema()
         command.stamp(config, "0001")
+        command.upgrade(config, "head")
     else:
         command.upgrade(config, "head")
     with SessionLocal() as session:

@@ -113,6 +113,7 @@ class PaletteSettings(Base):
 
 class ServiceStatus(str, Enum):
     DRAFT = "draft"
+    READY_TO_ISSUE = "ready_to_issue"
     ACTIVE = "active"
 
 
