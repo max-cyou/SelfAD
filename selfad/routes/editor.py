@@ -30,8 +30,10 @@ from selfad.rate_limit import rate_limiter
 from selfad.routes.participants import participant_access
 from selfad.scoring import get_scoring_settings
 from selfad.settings import get_gitea_settings
+from selfad.web import templates
 
 router = APIRouter(prefix="/api/editor", tags=["editor"])
+page_router = APIRouter()
 EditorKind = Literal["source", "attack", "defense"]
 
 
@@ -74,7 +76,7 @@ def _participant_service(
     ).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Service assignment not found.")
-    return row
+    return row[0], row[1]
 
 
 def _workspace(
@@ -143,6 +145,32 @@ def _context(
         kind=kind,
     )
     return user, assignment, service, workspace
+
+
+@page_router.get("/services/{assignment_id}/editor/{kind}")
+def editor_page(
+    assignment_id: int,
+    kind: EditorKind,
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    user = _authenticated_user(request, session)
+    assignment, service = _participant_service(
+        session,
+        user_id=user.id,
+        assignment_id=assignment_id,
+    )
+    if kind == "defense" and not assignment.defense_unlocked:
+        raise HTTPException(status_code=403, detail="Defense is still locked.")
+    return templates.TemplateResponse(
+        request=request,
+        name="editor.html",
+        context={
+            "assignment": assignment,
+            "service": service,
+            "editor_kind": kind,
+        },
+    )
 
 
 @router.get("/{assignment_id}/{kind}/tree")

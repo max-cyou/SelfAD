@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>{{ service.name }} · {{ editor_kind | title }} · SelfAD</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/editor.css') }}?v={{ static_version('editor.css') }}">
+    <script src="{{ url_for('static', path='/editor.js') }}?v={{ static_version('editor.js') }}" defer></script>
+  </head>
+  <body>
+    <div class="editor-app">
+      <header class="editor-topbar">
+        <strong>SelfAD Code Editor</strong>
+        <span class="editor-separator" aria-hidden="true">|</span>
+        <span>{{ service.slug }} / {{ editor_kind }}</span>
+      </header>
+
+      <main
+        class="editor-workspace"
+        aria-label="Editor workspace"
+        data-assignment-id="{{ assignment.id }}"
+        data-editor-kind="{{ editor_kind }}"
+      >
+        <aside class="file-sidebar" aria-label="Repository files">
+          <div class="file-sidebar-title">Files</div>
+          <div class="file-tree" id="file-tree" aria-live="polite">
+            <span class="file-tree-message">Loading…</span>
+          </div>
+          <div class="file-sidebar-actions">
+            <button class="submit-button" type="button">Commit &amp; Submit</button>
+            <span class="change-summary" id="change-summary">0 lines changed</span>
+          </div>
+        </aside>
+        <section class="editor-pane" aria-label="Code editor"></section>
+      </main>
+
+      <footer class="editor-statusbar">
+        <span>Powered by SelfAD <span aria-hidden="true">·</span> Coded by maxcyou</span>
+      </footer>
+    </div>
+  </body>
+</html>
