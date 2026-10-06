@@ -59,6 +59,28 @@ class ProvisionedService:
     ssh_key_id: int
 
 
+@dataclass(frozen=True)
+class GiteaRepositoryFile:
+    path: str
+    sha: str
+    size: int
+
+
+@dataclass(frozen=True)
+class GiteaFileContent:
+    path: str
+    sha: str
+    content: bytes
+
+
+@dataclass(frozen=True)
+class GiteaFileChange:
+    operation: str
+    path: str
+    content: bytes | None = None
+    sha: str | None = None
+
+
 def _request(
     settings: GiteaSettings,
     method: str,
@@ -179,6 +201,24 @@ def get_repository_file(
     ref: str,
     max_bytes: int = 262_144,
 ) -> bytes | None:
+    file = get_repository_file_content(
+        settings,
+        repository_path,
+        file_path,
+        ref=ref,
+        max_bytes=max_bytes,
+    )
+    return file.content if file else None
+
+
+def get_repository_file_content(
+    settings: GiteaSettings,
+    repository_path: str,
+    file_path: str,
+    *,
+    ref: str,
+    max_bytes: int = 262_144,
+) -> GiteaFileContent | None:
     try:
         owner, name = repository_path.split("/", 1)
     except ValueError:
@@ -204,9 +244,17 @@ def get_repository_file(
         return None
 
     size = payload.get("size")
+    sha = payload.get("sha")
     content = payload.get("content")
     encoding = payload.get("encoding")
-    if not isinstance(size, int) or not isinstance(content, str) or encoding != "base64":
+    if (
+        not isinstance(size, int)
+        or isinstance(size, bool)
+        or not isinstance(sha, str)
+        or not sha
+        or not isinstance(content, str)
+        or encoding != "base64"
+    ):
         raise GiteaUnavailable("Gitea returned an invalid file response.")
     if size > max_bytes:
         raise GiteaFileTooLarge(f"{file_path} exceeds the {max_bytes} byte limit.")
@@ -217,7 +265,7 @@ def get_repository_file(
         raise GiteaUnavailable("Gitea returned invalid file content.") from error
     if len(decoded) > max_bytes:
         raise GiteaFileTooLarge(f"{file_path} exceeds the {max_bytes} byte limit.")
-    return decoded
+    return GiteaFileContent(path=file_path, sha=sha, content=decoded)
 
 
 def download_repository_archive(
@@ -667,6 +715,22 @@ def list_repository_files(
     *,
     ref: str,
 ) -> list[str]:
+    return [
+        file.path
+        for file in list_repository_file_entries(
+            settings,
+            repository_path,
+            ref=ref,
+        )
+    ]
+
+
+def list_repository_file_entries(
+    settings: GiteaSettings,
+    repository_path: str,
+    *,
+    ref: str,
+) -> list[GiteaRepositoryFile]:
     try:
         owner, name = repository_path.split("/", 1)
     except ValueError as error:
@@ -684,21 +748,89 @@ def list_repository_files(
     tree = response.get("tree") if isinstance(response, dict) else None
     if not isinstance(tree, list):
         raise GiteaUnavailable("Gitea returned an invalid repository tree.")
-    files: list[str] = []
+    files: list[GiteaRepositoryFile] = []
     for item in tree:
         path = item.get("path") if isinstance(item, dict) else None
         item_type = item.get("type") if isinstance(item, dict) else None
+        sha = item.get("sha") if isinstance(item, dict) else None
+        size = item.get("size") if isinstance(item, dict) else None
         if (
             isinstance(path, str)
             and item_type == "blob"
+            and isinstance(sha, str)
+            and sha
+            and isinstance(size, int)
+            and not isinstance(size, bool)
+            and size >= 0
             and path
             and not path.startswith("/")
             and ".." not in path.split("/")
         ):
-            files.append(path)
+            files.append(GiteaRepositoryFile(path=path, sha=sha, size=size))
     if len(files) > 2_000:
         raise GiteaFileTooLarge("Repository contains too many files to provision.")
     return files
+
+
+def change_repository_files(
+    settings: GiteaSettings,
+    repository_path: str,
+    *,
+    branch: str,
+    message: str,
+    changes: list[GiteaFileChange],
+    author_name: str,
+    author_email: str,
+) -> str:
+    try:
+        owner, name = repository_path.split("/", 1)
+    except ValueError as error:
+        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
+    if not changes:
+        raise ValueError("At least one repository file change is required.")
+
+    files: list[dict[str, object]] = []
+    for change in changes:
+        if change.operation not in {"create", "update", "delete"}:
+            raise ValueError("Unsupported repository file operation.")
+        payload: dict[str, object] = {
+            "operation": change.operation,
+            "path": change.path,
+        }
+        if change.content is not None:
+            payload["content"] = base64.b64encode(change.content).decode("ascii")
+        if change.sha is not None:
+            payload["sha"] = change.sha
+        files.append(payload)
+
+    path = f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}/contents"
+    try:
+        response = _request(
+            settings,
+            "POST",
+            path,
+            {
+                "branch": branch,
+                "message": message,
+                "author": {"name": author_name, "email": author_email},
+                "committer": {"name": author_name, "email": author_email},
+                "files": files,
+            },
+        )
+    except _GiteaRequestError as error:
+        if error.status_code in {409, 422}:
+            raise GiteaConflict("Repository changed while the files were submitted.") from error
+        if error.status_code in {401, 403}:
+            raise GiteaUnavailable("Gitea cannot update the repository.") from error
+        if error.status_code == 404:
+            raise GiteaRepositoryNotFound("Gitea repository was not found.") from error
+        raise GiteaUnavailable("Gitea could not update the repository.") from error
+
+    commit = response.get("commit") if isinstance(response, dict) else None
+    commit_sha = commit.get("sha") if isinstance(commit, dict) else None
+    if not isinstance(commit_sha, str) or not commit_sha:
+        raise GiteaUnavailable("Gitea returned an invalid multi-file commit response.")
+    return commit_sha
 
 
 def delete_repository(settings: GiteaSettings, repository_path: str) -> None:
