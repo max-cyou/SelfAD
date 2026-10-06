@@ -4,6 +4,7 @@ __pycache__/
 .env
 .idea/
 .vscode/
+frontend/node_modules/
 data/
 README.draft.md
 .env

@@ -181,6 +181,32 @@ button.file-tree-row {
   text-overflow: ellipsis;
 }
 
+.file-tree-dirty {
+  display: none;
+  align-items: center;
+  gap: 0.375rem;
+  margin-left: auto;
+  padding-left: 0.5rem;
+}
+
+.file-tree-row.is-dirty .file-tree-dirty {
+  display: flex;
+}
+
+.file-tree-shortcut {
+  color: #777d87;
+  font-size: 0.5625rem;
+  font-weight: 500;
+}
+
+.file-tree-dirty-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: #d6a84b;
+  box-shadow: 0 0 0 1px #6d582e;
+}
+
 .file-sidebar-actions {
   display: flex;
   flex-direction: column;
@@ -221,6 +247,13 @@ button.file-tree-row {
   outline-offset: 2px;
 }
 
+.submit-button:disabled {
+  border-color: #30343b;
+  background: #22252b;
+  color: #686e78;
+  cursor: default;
+}
+
 .change-summary {
   color: #737984;
   font-size: 0.625rem;
@@ -231,6 +264,11 @@ button.file-tree-row {
 .editor-pane {
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
+}
+
+.editor-pane .cm-editor {
+  height: 100%;
 }
 
 .editor-statusbar {

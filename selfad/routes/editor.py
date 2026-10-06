@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from selfad.auth import csrf_token_is_valid
+from selfad.auth import csrf_token_is_valid, get_csrf_token
 from selfad.database import get_session
 from selfad.editor import (
     MAX_EDITOR_FILE_BYTES,
@@ -167,8 +167,10 @@ def editor_page(
         name="editor.html",
         context={
             "assignment": assignment,
+            "csrf_token": get_csrf_token(request),
             "service": service,
             "editor_kind": kind,
+            "user": user,
         },
     )
 

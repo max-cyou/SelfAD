@@ -6,6 +6,7 @@
     <meta name="color-scheme" content="dark">
     <title>{{ service.name }} · {{ editor_kind | title }} · SelfAD</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/editor.css') }}?v={{ static_version('editor.css') }}">
+    <script src="{{ url_for('static', path='/editor-codemirror.js') }}?v={{ static_version('editor-codemirror.js') }}" defer></script>
     <script src="{{ url_for('static', path='/editor.js') }}?v={{ static_version('editor.js') }}" defer></script>
   </head>
   <body>
@@ -20,7 +21,9 @@
         class="editor-workspace"
         aria-label="Editor workspace"
         data-assignment-id="{{ assignment.id }}"
+        data-csrf-token="{{ csrf_token }}"
         data-editor-kind="{{ editor_kind }}"
+        data-user-id="{{ user.id }}"
       >
         <aside class="file-sidebar" aria-label="Repository files">
           <div class="file-sidebar-title">Files</div>
@@ -28,7 +31,7 @@
             <span class="file-tree-message">Loading…</span>
           </div>
           <div class="file-sidebar-actions">
-            <button class="submit-button" type="button">Commit &amp; Submit</button>
+            <button class="submit-button" id="submit-button" type="button">Save all &amp; Submit</button>
             <span class="change-summary" id="change-summary">0 lines changed</span>
           </div>
         </aside>
