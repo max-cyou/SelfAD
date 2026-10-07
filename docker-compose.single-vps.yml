@@ -1,0 +1,25 @@
+# Single-VPS deployment: keeps PostgreSQL on this host and runs the participant
+# runner as the bundled in-container dockerd instead of an external mTLS
+# endpoint. Requires SELFAD_PUBLIC_EVENT_MODE=false, because public-event mode
+# fails closed unless the runner is an isolated external mTLS Docker endpoint.
+services:
+  selfad:
+    # The bundled dockerd runs inside this container, so it needs full
+    # privileges to manage cgroups, mounts and nested namespaces.
+    privileged: true
+    environment:
+      SELFAD_ENABLE_INTERNAL_RUNNER: "true"
+      SELFAD_RUNNER_DOCKER_HOST: unix:///run/selfad-docker/docker.sock
+      SELFAD_RUNNER_TLS_VERIFY: "false"
+      SELFAD_RUNNER_CERT_PATH: ""
+      SELFAD_PUBLIC_EVENT_MODE: "false"
+    volumes:
+      # Nested containers only get usable cgroup controllers when the
+      # in-container dockerd writes them itself. With the systemd driver it
+      # enables cpuset in the container cgroup, which flips that cgroup to
+      # "domain threaded" and costs the runner its --memory/--cpus limits.
+      - ./docker/daemon-inner.json:/etc/docker/daemon.json:ro
+      # The wrapper parks this container's processes in a leaf cgroup and
+      # delegates memory/io/cpu/pids/cpuset before the daemon starts.
+      - ./docker/dockerd-run:/opt/selfad/dockerd-run.original:ro
+      - ./docker/dockerd-run-wrapper.sh:/etc/s6/dockerd/run:ro
