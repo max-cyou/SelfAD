@@ -38,13 +38,21 @@
                   <a class="repository-link repository-link--source" href="{{ card.source_url }}" target="_blank" rel="noreferrer">
                     <span>Source</span><strong>Read-only service</strong><small>Open repository ↗</small>
                   </a>
-                  <a class="repository-link" href="{{ card.attack_url }}" target="_blank" rel="noreferrer">
-                    <span>Attack</span><strong>Exploit repository</strong><small>Open repository ↗</small>
-                  </a>
+                  <div class="repository-link repository-link--editable">
+                    <span>Attack</span><strong>Exploit repository</strong>
+                    <div class="repository-actions">
+                      <a href="{{ url_for('editor_page', assignment_id=assignment.id, kind='attack') }}">Open in editor</a>
+                      <a href="{{ card.attack_url }}" target="_blank" rel="noreferrer">Open repository ↗</a>
+                    </div>
+                  </div>
                   {% if assignment.defense_unlocked %}
-                    <a class="repository-link" href="{{ card.defense_url }}" target="_blank" rel="noreferrer">
-                      <span>Defense</span><strong>Fix repository</strong><small>Open repository ↗</small>
-                    </a>
+                    <div class="repository-link repository-link--editable">
+                      <span>Defense</span><strong>Fix repository</strong>
+                      <div class="repository-actions">
+                        <a href="{{ url_for('editor_page', assignment_id=assignment.id, kind='defense') }}">Open in editor</a>
+                        <a href="{{ card.defense_url }}" target="_blank" rel="noreferrer">Open repository ↗</a>
+                      </div>
+                    </div>
                   {% else %}
                     <div class="repository-link repository-link--locked">
                       <span>Defense</span><strong>Locked</strong><small>Unlock it with a successful attack.</small>
