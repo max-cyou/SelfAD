@@ -58,7 +58,7 @@ body {
 
 .editor-workspace {
   display: grid;
-  grid-template-columns: 16rem minmax(0, 1fr);
+  grid-template-columns: 16rem minmax(0, 1fr) 18rem;
   min-width: 0;
   min-height: 0;
   background: #0f1115;
@@ -271,6 +271,131 @@ button.file-tree-row {
   height: 100%;
 }
 
+.git-sidebar {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border-left: 1px solid #282b31;
+  background: #15171b;
+}
+
+.git-sidebar-title {
+  height: 2.375rem;
+  padding: 0 0.875rem;
+  border-bottom: 1px solid #24272c;
+  color: #a5aab3;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 2.375rem;
+  letter-spacing: 0.01em;
+}
+
+.git-sidebar-content {
+  display: grid;
+  gap: 1rem;
+  padding: 0.875rem;
+}
+
+.git-sidebar-copy,
+.git-key-state,
+.git-key-feedback,
+.clone-feedback {
+  margin: 0;
+  color: #858b96;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+}
+
+.git-key-state--ready {
+  color: #91b998;
+}
+
+.ssh-key-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.ssh-key-form label,
+.clone-command-block > span {
+  color: #a5aab3;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.ssh-key-form textarea {
+  width: 100%;
+  min-height: 4.8rem;
+  resize: vertical;
+  padding: 0.5rem;
+  border: 1px solid #30343b;
+  border-radius: 0.3125rem;
+  outline: none;
+  background: #101216;
+  color: #d7dae0;
+  font: 0.6875rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.ssh-key-form textarea:focus {
+  border-color: #5a626e;
+}
+
+.ssh-key-form button,
+.remove-ssh-key,
+.clone-command button {
+  border: 1px solid #3a3f48;
+  border-radius: 0.3125rem;
+  background: #292d35;
+  color: #e4e6ea;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ssh-key-form button {
+  height: 1.875rem;
+}
+
+.remove-ssh-key {
+  width: 100%;
+  height: 1.875rem;
+}
+
+.ssh-key-form button:disabled,
+.remove-ssh-key:disabled {
+  color: #737984;
+  cursor: default;
+}
+
+.clone-command-block {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.clone-command {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  border: 1px solid #30343b;
+  border-radius: 0.3125rem;
+  background: #101216;
+}
+
+.clone-command code {
+  min-width: 0;
+  flex: 1;
+  padding: 0.5rem;
+  overflow-x: auto;
+  color: #c5cbd4;
+  font: 0.625rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+}
+
+.clone-command button {
+  margin: 0.25rem;
+  padding: 0 0.5rem;
+}
+
 .editor-statusbar {
   justify-content: center;
   padding: 0 0.875rem;
@@ -287,5 +412,9 @@ button.file-tree-row {
 
   .editor-workspace {
     grid-template-columns: 13.125rem minmax(0, 1fr);
+  }
+
+  .git-sidebar {
+    display: none;
   }
 }

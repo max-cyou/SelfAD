@@ -22,7 +22,6 @@ from selfad.gitea import (
     GiteaConflict,
     GiteaError,
     GiteaUnavailable,
-    add_user_ssh_key,
     create_gitea_user,
     delete_gitea_user,
     gitea_username_exists,
@@ -52,7 +51,6 @@ USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 DEFAULT_REGISTRATION_FORM = {
     "username": "",
     "email": "",
-    "ssh_public_key": "",
 }
 
 
@@ -289,12 +287,6 @@ def validate_registration(
         errors["password"] = "Use between 10 and 128 characters."
     if password != password_confirm:
         errors["password_confirm"] = "Passwords do not match."
-    key = values["ssh_public_key"]
-    if key and (
-        len(key) > 2048
-        or not key.startswith(("ssh-", "ecdsa-", "sk-ssh-", "sk-ecdsa-"))
-    ):
-        errors["ssh_public_key"] = "Enter a valid SSH public key."
     return errors
 
 
@@ -376,7 +368,6 @@ async def register(
     values = {
         "username": str(form.get("username", "")).strip(),
         "email": str(form.get("email", "")).strip().lower(),
-        "ssh_public_key": str(form.get("ssh_public_key", "")).strip(),
     }
     password = str(form.get("password", ""))
     password_confirm = str(form.get("password_confirm", ""))
@@ -425,7 +416,6 @@ async def register(
         )
 
     gitea_user = None
-    ssh_key_id = None
     try:
         gitea_user = await run_in_threadpool(
             create_gitea_user,
@@ -434,13 +424,6 @@ async def register(
             email=values["email"],
             password=password,
         )
-        if values["ssh_public_key"]:
-            ssh_key_id = await run_in_threadpool(
-                add_user_ssh_key,
-                settings,
-                username=gitea_user.username,
-                public_key=values["ssh_public_key"],
-            )
     except GiteaConflict as error:
         if gitea_user is not None:
             try:
@@ -451,16 +434,12 @@ async def register(
                 )
             except GiteaError:
                 pass
-        # A conflict means Gitea rejected the input itself (username taken,
-        # malformed SSH key): that is a form error, not a gateway failure.
+        # A conflict means Gitea rejected the username itself: that is a form
+        # error, not a gateway failure.
         return render_registration(
             request,
             session,
-            registration_errors={
-                "username" if gitea_user is None else "ssh_public_key": str(
-                    error
-                )
-            },
+            registration_errors={"username": str(error)},
             registration_form=values,
             status_code=422,
         )
@@ -486,8 +465,6 @@ async def register(
         username=values["username"],
         email=values["email"],
         password_hash=hash_password(password),
-        ssh_public_key=values["ssh_public_key"],
-        git_ssh_key_id=ssh_key_id,
         gitea_user_id=gitea_user.id,
         gitea_username=gitea_user.username,
     )

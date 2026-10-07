@@ -183,6 +183,51 @@ class EditorEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["detail"], "Defense is still locked.")
 
+    @patch("selfad.routes.editor.add_user_ssh_key", return_value=71)
+    @patch("selfad.routes.editor.csrf_token_is_valid", return_value=True)
+    @patch("selfad.routes.editor.participant_access")
+    def test_editor_can_add_a_participant_ssh_key(self, access, _csrf, add_key):
+        access.return_value = (self.user(), None)
+
+        response = self.client.post(
+            "/api/editor/ssh-key",
+            headers={"X-CSRF-Token": "token"},
+            json={"public_key": "ssh-ed25519 AAAATEST participant@example.test"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"message": "SSH key added."})
+        self.assertEqual(add_key.call_args.kwargs["username"], "player")
+        with Session(self.engine) as session:
+            updated = session.get(User, self.user_id)
+            self.assertEqual(updated.git_ssh_key_id, 71)
+            self.assertTrue(updated.ssh_public_key.startswith("ssh-ed25519"))
+
+    @patch("selfad.routes.editor.delete_user_ssh_key")
+    @patch("selfad.routes.editor.csrf_token_is_valid", return_value=True)
+    @patch("selfad.routes.editor.participant_access")
+    def test_editor_can_remove_a_participant_ssh_key(self, access, _csrf, delete_key):
+        with Session(self.engine) as session:
+            user = session.get(User, self.user_id)
+            user.ssh_public_key = "ssh-ed25519 AAAATEST participant@example.test"
+            user.git_ssh_key_id = 71
+            session.commit()
+        access.return_value = (self.user(), None)
+
+        response = self.client.delete(
+            "/api/editor/ssh-key",
+            headers={"X-CSRF-Token": "token"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"message": "SSH key removed."})
+        self.assertEqual(delete_key.call_args.kwargs["username"], "player")
+        self.assertEqual(delete_key.call_args.kwargs["key_id"], 71)
+        with Session(self.engine) as session:
+            updated = session.get(User, self.user_id)
+            self.assertIsNone(updated.git_ssh_key_id)
+            self.assertIsNone(updated.ssh_public_key)
+
     @patch("selfad.routes.editor.change_repository_files", return_value="d" * 40)
     @patch("selfad.routes.editor.csrf_token_is_valid", return_value=True)
     @patch("selfad.routes.editor.get_branch_commit", return_value="a" * 40)

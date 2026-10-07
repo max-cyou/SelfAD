@@ -3,6 +3,12 @@ const treeElement = document.querySelector("#file-tree");
 const editorPane = document.querySelector(".editor-pane");
 const submitButton = document.querySelector("#submit-button");
 const changeSummary = document.querySelector("#change-summary");
+const sshKeyForm = document.querySelector("#ssh-key-form");
+const sshKeyFeedback = document.querySelector("#ssh-key-feedback");
+const removeSshKey = document.querySelector("#remove-ssh-key");
+const copyCloneCommand = document.querySelector("#copy-clone-command");
+const cloneCommand = document.querySelector("#clone-command");
+const cloneFeedback = document.querySelector("#clone-feedback");
 
 const DRAFT_DATABASE = "selfad-code-editor";
 const DRAFT_STORE = "drafts";
@@ -392,4 +398,71 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 submitButton?.addEventListener("click", submitChanges);
+
+copyCloneCommand?.addEventListener("click", async () => {
+  const command = cloneCommand?.textContent?.trim();
+  if (!command) return;
+  try {
+    await navigator.clipboard.writeText(command);
+    copyCloneCommand.textContent = "Copied";
+    cloneFeedback.textContent = "Clone command copied.";
+  } catch (_error) {
+    copyCloneCommand.textContent = "Copy failed";
+    cloneFeedback.textContent = "Select and copy the command manually.";
+  }
+  window.setTimeout(() => {
+    copyCloneCommand.textContent = "Copy";
+  }, 1600);
+});
+
+sshKeyForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const submit = sshKeyForm.querySelector("button[type='submit']");
+  const publicKey = new FormData(sshKeyForm).get("public_key");
+  if (typeof publicKey !== "string") return;
+
+  submit.disabled = true;
+  sshKeyFeedback.textContent = "Adding SSH key…";
+  try {
+    const response = await fetch("/api/editor/ssh-key", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-CSRF-Token": workspace.dataset.csrfToken,
+      },
+      body: JSON.stringify({ public_key: publicKey }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || "Could not add SSH key.");
+    sshKeyFeedback.textContent = payload.message;
+    window.setTimeout(() => window.location.reload(), 350);
+  } catch (error) {
+    sshKeyFeedback.textContent = error instanceof Error ? error.message : "Could not add SSH key.";
+    submit.disabled = false;
+  }
+});
+
+removeSshKey?.addEventListener("click", async () => {
+  if (!window.confirm("Remove this SSH key from your Git account?")) return;
+  removeSshKey.disabled = true;
+  sshKeyFeedback.textContent = "Removing SSH key…";
+  try {
+    const response = await fetch("/api/editor/ssh-key", {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+        "X-CSRF-Token": workspace.dataset.csrfToken,
+      },
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || "Could not remove SSH key.");
+    sshKeyFeedback.textContent = payload.message;
+    window.setTimeout(() => window.location.reload(), 350);
+  } catch (error) {
+    sshKeyFeedback.textContent = error instanceof Error ? error.message : "Could not remove SSH key.";
+    removeSshKey.disabled = false;
+  }
+});
+
 loadFiles();

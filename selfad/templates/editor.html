@@ -36,6 +36,33 @@
           </div>
         </aside>
         <section class="editor-pane" aria-label="Code editor"></section>
+        <aside class="git-sidebar" aria-label="Git over SSH" data-ssh-key-configured="{{ 'true' if user.ssh_public_key else 'false' }}">
+          <div class="git-sidebar-title">Git over SSH</div>
+          <div class="git-sidebar-content">
+            {% if user.ssh_public_key %}
+              <p class="git-key-state git-key-state--ready">SSH key added</p>
+              <button class="remove-ssh-key" id="remove-ssh-key" type="button">Remove SSH key</button>
+              <p class="git-key-feedback" id="ssh-key-feedback" aria-live="polite"></p>
+            {% else %}
+              <p class="git-sidebar-copy">Add a public key to work with this repository from your terminal.</p>
+              <form class="ssh-key-form" id="ssh-key-form">
+                <label for="ssh-public-key">SSH public key</label>
+                <textarea id="ssh-public-key" name="public_key" rows="4" maxlength="2048" placeholder="ssh-ed25519 AAAA…" spellcheck="false" required></textarea>
+                <button type="submit">Add SSH key</button>
+              </form>
+              <p class="git-key-feedback" id="ssh-key-feedback" aria-live="polite"></p>
+            {% endif %}
+
+            <div class="clone-command-block">
+              <span>Clone repository</span>
+              <div class="clone-command">
+                <code id="clone-command">{{ ssh_clone_command }}</code>
+                <button type="button" id="copy-clone-command" aria-label="Copy clone command">Copy</button>
+              </div>
+              <p class="clone-feedback" id="clone-feedback" aria-live="polite"></p>
+            </div>
+          </div>
+        </aside>
       </main>
 
       <footer class="editor-statusbar">

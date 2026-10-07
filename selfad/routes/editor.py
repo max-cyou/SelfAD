@@ -1,9 +1,13 @@
+import os
+import re
 from typing import Literal
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from selfad.auth import csrf_token_is_valid, get_csrf_token
 from selfad.database import get_session
@@ -20,7 +24,10 @@ from selfad.gitea import (
     GiteaConflict,
     GiteaError,
     GiteaFileTooLarge,
+    GiteaUnavailable,
+    add_user_ssh_key,
     change_repository_files,
+    delete_user_ssh_key,
     get_branch_commit,
     get_repository_file_content,
     list_repository_file_entries,
@@ -35,6 +42,7 @@ from selfad.web import templates
 router = APIRouter(prefix="/api/editor", tags=["editor"])
 page_router = APIRouter()
 EditorKind = Literal["source", "attack", "defense"]
+SSH_PUBLIC_KEY_PATTERN = re.compile(r"^(ssh-|ecdsa-|sk-ssh-|sk-ecdsa-)")
 
 
 class EditorChangeInput(BaseModel):
@@ -47,6 +55,36 @@ class EditorChangeInput(BaseModel):
 class EditorSubmissionInput(BaseModel):
     base_commit: str
     changes: list[EditorChangeInput]
+
+
+class EditorSshKeyInput(BaseModel):
+    public_key: str = Field(min_length=1, max_length=2048)
+
+
+def _ssh_clone_command(repository_path: str) -> str:
+    settings = get_gitea_settings()
+    parsed_url = urlparse(settings.public_url)
+    hostname = os.getenv(
+        "SELFAD_GITEA_SSH_DOMAIN",
+        os.getenv("GITEA__server__SSH_DOMAIN", parsed_url.hostname or ""),
+    ).strip()
+    if not hostname:
+        raise HTTPException(status_code=503, detail="Git SSH hostname is unavailable.")
+    try:
+        port = int(
+            os.getenv(
+                "SELFAD_GITEA_SSH_PUBLIC_PORT",
+                os.getenv("GITEA__server__SSH_PORT", "22"),
+            )
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=503, detail="Git SSH port is invalid.") from error
+    if not 1 <= port <= 65535:
+        raise HTTPException(status_code=503, detail="Git SSH port is invalid.")
+    repository = f"{repository_path}.git"
+    if port == 22:
+        return f"git clone git@{hostname}:{repository}"
+    return f"git clone ssh://git@{hostname}:{port}/{repository}"
 
 
 def _authenticated_user(request: Request, session: Session) -> User:
@@ -168,6 +206,11 @@ def editor_page(
         context={
             "assignment": assignment,
             "csrf_token": get_csrf_token(request),
+            "ssh_clone_command": _ssh_clone_command(
+                assignment.attack_repository_path
+                if kind == "attack"
+                else assignment.defense_repository_path
+            ),
             "service": service,
             "editor_kind": kind,
             "user": user,
@@ -213,6 +256,78 @@ def editor_tree(
             for file in files
         ],
     }
+
+
+@router.post("/ssh-key")
+async def editor_add_ssh_key(
+    key_input: EditorSshKeyInput,
+    request: Request,
+    x_csrf_token: str | None = Header(default=None),
+    session: Session = Depends(get_session),
+):
+    user = _authenticated_user(request, session)
+    user = session.get(User, user.id) or user
+    if not csrf_token_is_valid(request, x_csrf_token):
+        raise HTTPException(status_code=403, detail="Invalid CSRF token.")
+    public_key = key_input.public_key.strip()
+    if not SSH_PUBLIC_KEY_PATTERN.match(public_key):
+        raise HTTPException(status_code=422, detail="Enter a valid SSH public key.")
+    if user.ssh_public_key:
+        raise HTTPException(status_code=409, detail="An SSH key is already configured.")
+    if not user.gitea_username:
+        raise HTTPException(status_code=409, detail="Git account is unavailable.")
+    if not rate_limiter.allow(f"editor-ssh-key:{user.id}", limit=5, window_seconds=60):
+        raise HTTPException(status_code=429, detail="Too many SSH key requests.")
+    try:
+        key_id = await run_in_threadpool(
+            add_user_ssh_key,
+            get_gitea_settings(),
+            username=user.gitea_username,
+            public_key=public_key,
+        )
+    except GiteaConflict as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except GiteaUnavailable as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+    user.ssh_public_key = public_key
+    user.git_ssh_key_id = key_id
+    session.commit()
+    return {"message": "SSH key added."}
+
+
+@router.delete("/ssh-key")
+async def editor_remove_ssh_key(
+    request: Request,
+    x_csrf_token: str | None = Header(default=None),
+    session: Session = Depends(get_session),
+):
+    user = _authenticated_user(request, session)
+    user = session.get(User, user.id) or user
+    if not csrf_token_is_valid(request, x_csrf_token):
+        raise HTTPException(status_code=403, detail="Invalid CSRF token.")
+    if not user.ssh_public_key:
+        raise HTTPException(status_code=404, detail="No SSH key is configured.")
+    if not user.gitea_username or not user.git_ssh_key_id:
+        raise HTTPException(status_code=409, detail="SSH key metadata is unavailable.")
+    if not rate_limiter.allow(
+        f"editor-ssh-key:{user.id}", limit=5, window_seconds=60
+    ):
+        raise HTTPException(status_code=429, detail="Too many SSH key requests.")
+    try:
+        await run_in_threadpool(
+            delete_user_ssh_key,
+            get_gitea_settings(),
+            username=user.gitea_username,
+            key_id=user.git_ssh_key_id,
+        )
+    except GiteaUnavailable as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+    user.ssh_public_key = None
+    user.git_ssh_key_id = None
+    session.commit()
+    return {"message": "SSH key removed."}
 
 
 @router.get("/{assignment_id}/{kind}/file")
