@@ -1554,6 +1554,28 @@ a.repository-link:hover small {
   text-decoration: underline;
 }
 
+.repository-link--editable:hover {
+  background: var(--surface-subtle);
+}
+
+.repository-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.repository-actions a {
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.repository-actions a:hover {
+  text-decoration: underline;
+}
+
 .repository-link--locked {
   background: var(--surface-subtle);
 }
@@ -1893,6 +1915,15 @@ a.repository-link:hover small {
     grid-row: 1 / 3;
     align-self: center;
     max-width: 130px;
+    margin-top: 0;
+    text-align: right;
+  }
+
+  .repository-link--editable .repository-actions {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    align-self: center;
+    align-items: flex-end;
     margin-top: 0;
     text-align: right;
   }

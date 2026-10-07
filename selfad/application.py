@@ -25,6 +25,7 @@ from selfad.models import ScoringSettings, Service, User
 from selfad.routes import (
     admin,
     authentication,
+    editor,
     health,
     home,
     participants,
@@ -186,6 +187,8 @@ def create_app() -> FastAPI:
     app.include_router(setup.router)
     app.include_router(authentication.router)
     app.include_router(participants.router)
+    app.include_router(editor.page_router)
+    app.include_router(editor.router)
     app.include_router(admin.router)
     app.include_router(webhooks.router)
     app.include_router(health.router)
