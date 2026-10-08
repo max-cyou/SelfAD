@@ -7,6 +7,8 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { basicSetup, EditorView } from "codemirror";
 import { diffLines } from "diff";
+import DOMPurify from "dompurify";
+import { marked } from "marked";
 
 const selfadHighlight = HighlightStyle.define([
   { tag: tags.comment, color: "#6f875f", fontStyle: "italic" },
@@ -103,4 +105,23 @@ export function mountEditor(parent, { content, editable, onChange, path }) {
       }),
     ],
   });
+}
+
+export function mountMarkdownPreview(parent, { content }) {
+  const preview = document.createElement("article");
+  preview.className = "markdown-preview";
+  preview.innerHTML = DOMPurify.sanitize(
+    marked.parse(content, { async: false, gfm: true }),
+    { USE_PROFILES: { html: true } },
+  );
+  for (const link of preview.querySelectorAll("a")) {
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+  }
+  parent.replaceChildren(preview);
+  return {
+    destroy() {
+      preview.remove();
+    },
+  };
 }

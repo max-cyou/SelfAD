@@ -273,16 +273,22 @@ async function openFile(fileMetadata) {
   if (requestNumber !== openRequest) return;
   currentFile = file;
   editorView?.destroy();
-  editorView = window.SelfADCodeMirror.mountEditor(editorPane, {
-    content: file.content,
-    editable: file.editable,
-    path: file.path,
-    onChange(content) {
-      file.content = content;
-      updateDirtyIndicator(file);
-      scheduleSummaryRefresh();
-    },
-  });
+  if (file.path.toLowerCase().endsWith(".md")) {
+    editorView = window.SelfADCodeMirror.mountMarkdownPreview(editorPane, {
+      content: file.content,
+    });
+  } else {
+    editorView = window.SelfADCodeMirror.mountEditor(editorPane, {
+      content: file.content,
+      editable: file.editable,
+      path: file.path,
+      onChange(content) {
+        file.content = content;
+        updateDirtyIndicator(file);
+        scheduleSummaryRefresh();
+      },
+    });
+  }
   updateDirtyIndicator(file);
   refreshChangeSummary();
 }

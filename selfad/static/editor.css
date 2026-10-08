@@ -271,6 +271,130 @@ button.file-tree-row {
   height: 100%;
 }
 
+.markdown-preview {
+  width: min(52rem, 100%);
+  height: 100%;
+  padding: 2rem 2.5rem 4rem;
+  margin: 0 auto;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  color: #c9cdd4;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.markdown-preview > :first-child {
+  margin-top: 0;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  margin: 1.75em 0 0.65em;
+  color: #e4e7eb;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.markdown-preview h1 {
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid #282c33;
+  font-size: 1.65rem;
+}
+
+.markdown-preview h2 {
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid #24282e;
+  font-size: 1.3rem;
+}
+
+.markdown-preview h3 {
+  font-size: 1.05rem;
+}
+
+.markdown-preview p,
+.markdown-preview ul,
+.markdown-preview ol,
+.markdown-preview blockquote,
+.markdown-preview pre,
+.markdown-preview table {
+  margin: 0.8rem 0;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  padding-left: 1.5rem;
+}
+
+.markdown-preview a {
+  color: #79a9d1;
+  text-decoration: none;
+}
+
+.markdown-preview a:hover {
+  text-decoration: underline;
+}
+
+.markdown-preview code {
+  padding: 0.12rem 0.32rem;
+  border: 1px solid #2a2e35;
+  border-radius: 0.25rem;
+  background: #171a1f;
+  color: #d1d5dc;
+  font: 0.75rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.markdown-preview pre {
+  padding: 0.8rem 0.9rem;
+  overflow: auto;
+  border: 1px solid #292d34;
+  border-radius: 0.375rem;
+  background: #111318;
+}
+
+.markdown-preview pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.markdown-preview blockquote {
+  padding: 0.1rem 0 0.1rem 0.9rem;
+  border-left: 0.2rem solid #3b414b;
+  color: #9298a2;
+}
+
+.markdown-preview table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #2c3037;
+  text-align: left;
+}
+
+.markdown-preview th {
+  background: #181b20;
+  color: #e0e3e8;
+}
+
+.markdown-preview hr {
+  height: 1px;
+  margin: 1.5rem 0;
+  border: 0;
+  background: #2b2f36;
+}
+
+.markdown-preview img {
+  max-width: 100%;
+}
+
 .git-sidebar {
   min-width: 0;
   min-height: 0;
