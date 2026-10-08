@@ -198,6 +198,7 @@ async def update_registration(
 
     registration_enabled = form.get("registration_enabled") == "on"
     invite_only = form.get("registration_invite_only") == "on"
+    gitea_public_enabled = form.get("gitea_public_enabled") == "on"
     invite_code = str(form.get("registration_invite_code", "")).strip()
     requested_contest_state = str(
         form.get("contest_state", "not_started")
@@ -263,6 +264,7 @@ async def update_registration(
                 "contest_ends_at_utc": "",
                 "registration_enabled": registration_enabled,
                 "registration_invite_only": invite_only,
+                "gitea_public_enabled": gitea_public_enabled,
                 **scoring_values,
             },
             active_section="general",
@@ -275,6 +277,7 @@ async def update_registration(
     config.contest_ends_at = contest_ends_at
     config.registration_enabled = registration_enabled
     config.registration_invite_only = invite_only
+    config.gitea_public_enabled = gitea_public_enabled
     scoring = get_scoring_settings(session)
     scoring.attack_reward_mode = str(scoring_values["attack_reward_mode"])
     scoring.attack_max_points = int(scoring_values["attack_max_points"])

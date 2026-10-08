@@ -237,6 +237,9 @@ def render_admin(
         "contest_ends_at_utc": scheduled_end_utc,
         "registration_enabled": branding["registration_enabled"],
         "registration_invite_only": branding["registration_invite_only"],
+        "gitea_public_enabled": bool(
+            config and config.gitea_public_enabled
+        ),
         "attack_reward_mode": scoring.attack_reward_mode,
         "attack_max_points": scoring.attack_max_points,
         "attack_points_per_flag": scoring.attack_points_per_flag,
@@ -363,6 +366,9 @@ def render_admin(
             "general_form": general_values,
             "ssh_key_required": not bool(user.ssh_public_key),
             "gitea_configured": gitea_settings.configured,
+            "gitea_public_enabled": bool(
+                config and config.gitea_public_enabled
+            ),
             "gitea_public_url": gitea_settings.public_url,
             "pending_pushes": pending_pushes,
             "runner_mode": runner_mode(),

@@ -39,7 +39,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     version = connection.scalar(
                         text("SELECT version_num FROM alembic_version")
                     )
-                self.assertEqual(version, "0002")
+                self.assertEqual(version, "0003")
                 service_checks = {
                     check["name"]: check["sqltext"]
                     for check in schema.get_check_constraints("services")
@@ -82,7 +82,12 @@ class DatabaseMigrationTests(unittest.TestCase):
                     version = connection.scalar(
                         text("SELECT version_num FROM alembic_version")
                     )
-                self.assertEqual(version, "0002")
+                self.assertEqual(version, "0003")
+                columns = {
+                    column["name"]
+                    for column in inspect(engine).get_columns("instance_config")
+                }
+                self.assertIn("gitea_public_enabled", columns)
             finally:
                 engine.dispose()
 

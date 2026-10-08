@@ -539,6 +539,28 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 proxy_set_header X-Forwarded-Proto $scheme;
 ```
 
+The Gitea web interface is closed by default and can be enabled from
+**Admin → General → Git interface**. With nginx, gate the Gitea virtual host
+through SelfAD before proxying it to port 8929:
+
+```nginx
+location = /_selfad_gitea_access {
+    internal;
+    proxy_pass http://127.0.0.1:8000/internal/gitea-public-access;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+}
+
+location / {
+    auth_request /_selfad_gitea_access;
+    proxy_pass http://127.0.0.1:8929;
+}
+```
+
+The bundled Caddy configuration already applies this gate. Git over SSH does
+not pass through the HTTP gate and remains available while the web interface
+is closed.
+
 Use at least `client_max_body_size 32m` for the Gitea host.
 
 ### Cloudflare

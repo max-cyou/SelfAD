@@ -15,7 +15,7 @@
         <section class="auth-card" aria-labelledby="login-title">
           <div class="auth-heading">
             <h1 id="login-title">Sign in</h1>
-            <p>Your SelfAD username and password are also your Gitea credentials.</p>
+            <p>{% if gitea_public_enabled %}Your SelfAD username and password are also your Gitea credentials.{% else %}Use your SelfAD account to access the contest.{% endif %}</p>
           </div>
 
           {% if error %}

@@ -20,6 +20,8 @@ class ProductionComposeTests(unittest.TestCase):
         self.assertNotIn('SELFAD_GITEA_HTTP_PORT:-8929}:8929', compose)
         self.assertIn("reverse_proxy selfad:8000", caddyfile)
         self.assertIn("reverse_proxy selfad:8929", caddyfile)
+        self.assertIn("forward_auth selfad:8000", caddyfile)
+        self.assertIn("/internal/gitea-public-access", caddyfile)
         self.assertIn("Strict-Transport-Security", caddyfile)
         self.assertEqual(caddyfile.count("import security_headers"), 2)
 

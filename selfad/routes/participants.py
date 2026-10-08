@@ -110,6 +110,8 @@ def participant_services(
 
     branding = get_branding_context(session)
     settings = get_gitea_settings()
+    config = session.get(InstanceConfig, 1)
+    gitea_public_enabled = bool(config and config.gitea_public_enabled)
     assignments = session.execute(
         select(ParticipantService, Service)
         .join(Service, Service.id == ParticipantService.service_id)
@@ -130,6 +132,7 @@ def participant_services(
             "defense_url": repository_url(
                 settings.public_url, assignment.defense_repository_path
             ),
+            "gitea_public_enabled": gitea_public_enabled,
         }
         for assignment, service in assignments
     ]

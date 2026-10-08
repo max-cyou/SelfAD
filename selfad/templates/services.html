@@ -17,7 +17,7 @@
           <h1>Vulnerable services</h1>
           <div class="participant-heading-meta">
             <p>Push an exploit to attack. The defense repository opens after your first successful attack.</p>
-            <p class="participant-credentials">Your SelfAD username and password also work in Gitea.</p>
+            {% if cards and cards[0].gitea_public_enabled %}<p class="participant-credentials">Your SelfAD username and password also work in Gitea.</p>{% endif %}
           </div>
         </div>
 
@@ -35,14 +35,18 @@
                   <span class="score-total">{{ assignment.attack_score + assignment.defense_score }} pts</span>
                 </div>
                 <div class="repository-grid">
-                  <a class="repository-link repository-link--source" href="{{ card.source_url }}" target="_blank" rel="noreferrer">
-                    <span>Source</span><strong>Read-only service</strong><small>Open repository ↗</small>
-                  </a>
+                  <div class="repository-link repository-link--source">
+                    <span>Source</span><strong>Read-only service</strong>
+                    <div class="repository-actions">
+                      <a href="{{ url_for('editor_page', assignment_id=assignment.id, kind='source') }}">Open in editor</a>
+                      {% if card.gitea_public_enabled %}<a href="{{ card.source_url }}" target="_blank" rel="noreferrer">Open repository ↗</a>{% endif %}
+                    </div>
+                  </div>
                   <div class="repository-link repository-link--editable">
                     <span>Attack</span><strong>Exploit repository</strong>
                     <div class="repository-actions">
                       <a href="{{ url_for('editor_page', assignment_id=assignment.id, kind='attack') }}">Open in editor</a>
-                      <a href="{{ card.attack_url }}" target="_blank" rel="noreferrer">Open repository ↗</a>
+                      {% if card.gitea_public_enabled %}<a href="{{ card.attack_url }}" target="_blank" rel="noreferrer">Open repository ↗</a>{% endif %}
                     </div>
                   </div>
                   {% if assignment.defense_unlocked %}
@@ -50,7 +54,7 @@
                       <span>Defense</span><strong>Fix repository</strong>
                       <div class="repository-actions">
                         <a href="{{ url_for('editor_page', assignment_id=assignment.id, kind='defense') }}">Open in editor</a>
-                        <a href="{{ card.defense_url }}" target="_blank" rel="noreferrer">Open repository ↗</a>
+                        {% if card.gitea_public_enabled %}<a href="{{ card.defense_url }}" target="_blank" rel="noreferrer">Open repository ↗</a>{% endif %}
                       </div>
                     </div>
                   {% else %}

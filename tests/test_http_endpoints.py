@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from selfad.application import create_app
 from selfad.database import Base, get_session
-from selfad.models import RepositoryEvent
+from selfad.models import InstanceConfig, RepositoryEvent
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 
@@ -48,6 +48,25 @@ class HttpEndpointTests(unittest.TestCase):
         self.assertEqual(response.json(), {"status": "ok"})
         self.assertEqual(response.headers["x-frame-options"], "DENY")
         self.assertIn("default-src 'self'", response.headers["content-security-policy"])
+
+    def test_gitea_web_gate_is_closed_by_default(self):
+        response = self.client.get("/internal/gitea-public-access")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+
+    def test_gitea_web_gate_opens_from_instance_setting(self):
+        with Session(self.engine) as session:
+            session.add(
+                InstanceConfig(
+                    id=1,
+                    setup_complete=True,
+                    gitea_public_enabled=True,
+                )
+            )
+            session.commit()
+
+        response = self.client.get("/internal/gitea-public-access")
+        self.assertEqual(response.status_code, 204)
 
     def test_admin_redirects_to_setup_before_configuration(self):
         response = self.client.get("/admin", follow_redirects=False)

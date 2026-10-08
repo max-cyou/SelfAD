@@ -34,7 +34,7 @@ class PostgreSQLMigrationTests(unittest.TestCase):
         with engine.connect() as connection:
             self.assertEqual(
                 connection.scalar(text("SELECT version_num FROM alembic_version")),
-                "0002",
+                "0003",
             )
 
     def test_fresh_postgresql_database_reaches_head(self):
@@ -71,6 +71,7 @@ class PostgreSQLMigrationTests(unittest.TestCase):
         self.assertEqual(service_columns["status"]["type"].length, 14)
         for table, column in (
             ("instance_config", "registration_enabled"),
+            ("instance_config", "gitea_public_enabled"),
             ("services", "runtime_status"),
             ("users", "gitea_username"),
             ("branding_settings", "homepage_html"),

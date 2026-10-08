@@ -15,7 +15,7 @@
         <section class="registration-card registration-page" aria-labelledby="registration-title">
           <div class="registration-heading">
             <h1 id="registration-title">Create account</h1>
-            <p>Your username and password will also be used for Gitea.{% if registration_invite_only %} An invite code is required.{% endif %}</p>
+            <p>{% if gitea_public_enabled %}Your username and password will also be used for Gitea.{% else %}Create your SelfAD contest account.{% endif %}{% if registration_invite_only %} An invite code is required.{% endif %}</p>
           </div>
           {% if registration_errors.get('_form') %}<p class="registration-error" role="alert">{{ registration_errors['_form'] }}</p>{% endif %}
           <form class="registration-form" method="post" action="{{ url_for('register') }}">

@@ -2,13 +2,13 @@ import hmac
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from selfad.database import engine, get_session
 from selfad.gitea import GiteaError, get_authenticated_user
-from selfad.models import ParticipantService, RepositoryEvent
+from selfad.models import InstanceConfig, ParticipantService, RepositoryEvent
 from selfad.runner import runner_is_available, runner_mode
 from selfad.settings import get_gitea_settings, get_metrics_token
 
@@ -18,6 +18,15 @@ router = APIRouter()
 @router.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@router.get("/internal/gitea-public-access", include_in_schema=False)
+def gitea_public_access(session: Session = Depends(get_session)):
+    config = session.get(InstanceConfig, 1)
+    return Response(
+        status_code=204 if config and config.gitea_public_enabled else 403,
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get("/ready")

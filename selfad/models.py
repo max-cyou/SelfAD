@@ -40,6 +40,10 @@ class InstanceConfig(Base):
         String(255),
         nullable=True,
     )
+    gitea_public_enabled: Mapped[bool] = mapped_column(
+        default=False,
+        nullable=False,
+    )
 
 
 class BrandingSettings(Base):

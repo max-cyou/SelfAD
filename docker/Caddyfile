@@ -15,5 +15,8 @@
 {$SELFAD_GITEA_DOMAIN} {
 	encode zstd gzip
 	import security_headers
+	forward_auth selfad:8000 {
+		uri /internal/gitea-public-access
+	}
 	reverse_proxy selfad:8929
 }

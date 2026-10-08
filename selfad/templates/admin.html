@@ -115,6 +115,16 @@
                       >
                     </div>
                   </div>
+                  <div class="settings-subsection-title"><span>Git interface</span></div>
+                  <div class="registration-modes">
+                    <div class="registration-mode">
+                      <label class="general-checkbox">
+                        <input name="gitea_public_enabled" type="checkbox"{% if general_form.gitea_public_enabled %} checked{% endif %}>
+                        <span>Expose Gitea web interface</span>
+                      </label>
+                      <p>Allow public HTTPS access to Gitea. Git over SSH and the built-in editor continue to work when this is disabled.</p>
+                    </div>
+                  </div>
                   <div class="settings-subsection-title"><span>Contest</span></div>
                   {% if general_errors.get('contest_starts_at_local') %}
                     <p class="general-settings-error" role="alert">{{ general_errors.contest_starts_at_local }}</p>
@@ -347,8 +357,8 @@
                               <td><span class="table-state table-state--{{ service.status.value }}">{{ service.status.value | replace('_', ' ') }}</span></td>
                               <td>
                                 <div class="repo-pair">
-                                  <a href="{{ gitea_public_url }}/{{ service.repository_path }}" target="_blank" rel="noopener noreferrer">service ↗</a>
-                                  {% if service.jury_repository_path %}<a href="{{ gitea_public_url }}/{{ service.jury_repository_path }}" target="_blank" rel="noopener noreferrer">jury ↗</a>{% else %}<span>jury —</span>{% endif %}
+                                  {% if gitea_public_enabled %}<a href="{{ gitea_public_url }}/{{ service.repository_path }}" target="_blank" rel="noopener noreferrer">service ↗</a>{% else %}<span>service hidden</span>{% endif %}
+                                  {% if service.jury_repository_path and gitea_public_enabled %}<a href="{{ gitea_public_url }}/{{ service.jury_repository_path }}" target="_blank" rel="noopener noreferrer">jury ↗</a>{% elif service.jury_repository_path %}<span>jury hidden</span>{% else %}<span>jury —</span>{% endif %}
                                 </div>
                               </td>
                               <td>
@@ -625,7 +635,7 @@
                       <h3 id="gitea-credentials-title">Gitea administrator</h3>
                       <p>Credentials for the local Git server.</p>
                     </div>
-                    <a href="{{ gitea_public_url }}" target="_blank" rel="noopener noreferrer">Open Gitea <span aria-hidden="true">↗</span></a>
+                    {% if gitea_public_enabled %}<a href="{{ gitea_public_url }}" target="_blank" rel="noopener noreferrer">Open Gitea <span aria-hidden="true">↗</span></a>{% endif %}
                   </div>
 
                   <dl class="credential-list">

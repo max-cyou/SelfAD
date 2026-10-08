@@ -178,6 +178,9 @@ def get_branding_context(session: Session) -> dict[str, object]:
         "registration_invite_code_configured": bool(
             config and config.registration_invite_code_hash
         ),
+        "gitea_public_enabled": bool(
+            config and config.gitea_public_enabled
+        ),
         "contest_state": current_contest_state,
         "contest_started": current_contest_state == STARTED,
         "contest_ended": current_contest_state == ENDED,
