@@ -384,12 +384,17 @@ async function loadFiles() {
   }
 }
 
-document.addEventListener("keydown", (event) => {
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-    event.preventDefault();
-    saveCurrentFile();
-  }
-});
+window.addEventListener(
+  "keydown",
+  (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      event.stopPropagation();
+      saveCurrentFile();
+    }
+  },
+  { capture: true },
+);
 
 window.addEventListener("beforeunload", (event) => {
   if ([...openFiles.values()].some((file) => file.content !== file.savedContent)) {
