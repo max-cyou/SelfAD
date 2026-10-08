@@ -1,5 +1,10 @@
 # Production deployment
 
+For a concrete, sanitized deployment using the real J2W domains and nginx
+layout, see the [J2W Autumn CTF example](examples/j2w-autumn-ctf/README.md).
+That example documents the historical single-VPS setup; this guide remains the
+recommended topology for a new public event.
+
 The single-container setup is for local development and small trusted tests only.
 It starts an internal Docker daemon and therefore requires `--privileged`.
 Do not expose that mode to untrusted participants.

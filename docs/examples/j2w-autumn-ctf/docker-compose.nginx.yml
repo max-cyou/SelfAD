@@ -1,0 +1,11 @@
+services:
+  caddy:
+    profiles:
+      - bundled-caddy
+
+  selfad:
+    ports:
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8929:8929"
+    environment:
+      SELFAD_TRUSTED_PROXY_HOSTS: 172.30.0.1
