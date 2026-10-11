@@ -8,7 +8,7 @@ from sqlalchemy import or_, select, update
 
 from selfad.contest import STARTED, contest_state, start_contest_if_due
 from selfad.database import SessionLocal
-from selfad.gitea import GiteaError
+from selfad.gitea import GiteaError, get_branch_commit
 from selfad.models import (
     InstanceConfig,
     ParticipantRepositoryStatus,
@@ -47,6 +47,8 @@ class RepositoryBatch:
     participant_service_id: int | None = None
     repository_path: str | None = None
     commit_sha: str | None = None
+    source_commit: str | None = None
+    jury_commit: str | None = None
 
 
 def recover_interrupted_repository_events() -> int:
@@ -112,11 +114,23 @@ def process_next_repository_batch() -> bool:
 
     settings = get_gitea_settings()
     try:
+        source_commit = batch.source_commit or get_branch_commit(
+            settings,
+            repository_path,
+            branch=default_branch,
+        )
+        jury_commit = batch.jury_commit or get_branch_commit(
+            settings,
+            jury_repository_path,
+            branch=default_branch,
+        )
         contract = validate_service_contract(
             settings,
             repository_path=repository_path,
             jury_repository_path=jury_repository_path,
             default_branch=default_branch,
+            source_commit=source_commit,
+            jury_commit=jury_commit,
         )
     except GiteaError as error:
         _finish_batch_as_failure(batch, str(error))
@@ -248,32 +262,73 @@ def process_next_repository_batch() -> bool:
 
 def _claim_repository_batch() -> RepositoryBatch | None:
     with SessionLocal() as session:
-        event = session.scalar(
+        pending_events = session.scalars(
             select(RepositoryEvent)
             .where(RepositoryEvent.status == RepositoryEventStatus.PENDING)
             .order_by(RepositoryEvent.id)
-            .limit(1)
-        )
-        if event is None:
+            .limit(100)
+        ).all()
+        if not pending_events:
             return None
 
-        service = session.scalar(
-            select(Service).where(
-                or_(
-                    Service.repository_path == event.repository_path,
-                    Service.jury_repository_path == event.repository_path,
-                )
-            )
-        )
-        if service is None:
-            participant_service = session.scalar(
-                select(ParticipantService).where(
+        event = None
+        service = None
+        participant_service = None
+        repository_paths: tuple[str, ...] = ()
+        for candidate in pending_events:
+            candidate_service = session.scalar(
+                select(Service).where(
                     or_(
-                        ParticipantService.attack_repository_path == event.repository_path,
-                        ParticipantService.defense_repository_path == event.repository_path,
+                        Service.repository_path == candidate.repository_path,
+                        Service.jury_repository_path == candidate.repository_path,
                     )
                 )
             )
+            candidate_participant = None
+            if candidate_service is not None:
+                candidate_paths = tuple(
+                    path
+                    for path in (
+                        candidate_service.repository_path,
+                        candidate_service.jury_repository_path,
+                    )
+                    if path
+                )
+            else:
+                candidate_participant = session.scalar(
+                    select(ParticipantService).where(
+                        or_(
+                            ParticipantService.attack_repository_path
+                            == candidate.repository_path,
+                            ParticipantService.defense_repository_path
+                            == candidate.repository_path,
+                        )
+                    )
+                )
+                candidate_paths = (candidate.repository_path,)
+
+            processing_event = session.scalar(
+                select(RepositoryEvent.id)
+                .where(
+                    RepositoryEvent.status
+                    == RepositoryEventStatus.PROCESSING,
+                    RepositoryEvent.repository_path.in_(candidate_paths),
+                )
+                .limit(1)
+            )
+            if processing_event is not None:
+                continue
+
+            event = candidate
+            service = candidate_service
+            participant_service = candidate_participant
+            repository_paths = candidate_paths
+            break
+
+        if event is None:
+            return None
+
+        if service is None:
             if participant_service is None:
                 event.status = RepositoryEventStatus.DONE
                 event.message = "Repository is no longer managed by SelfAD."
@@ -324,17 +379,21 @@ def _claim_repository_batch() -> RepositoryBatch | None:
                 participant_service.defense_status = ParticipantRepositoryStatus.RUNNING
                 participant_service.defense_message = "Checking the latest defense push."
             session.commit()
-            return RepositoryBatch(event_ids, service.id, service.repository_generation, participant_service.id, event.repository_path, latest_event.commit_sha if latest_event else None)
+            return RepositoryBatch(
+                event_ids=event_ids,
+                service_id=service.id,
+                repository_generation=service.repository_generation,
+                participant_service_id=participant_service.id,
+                repository_path=event.repository_path,
+                commit_sha=latest_event.commit_sha,
+            )
 
         claim_token = uuid.uuid4().hex
         session.execute(
             update(RepositoryEvent)
             .where(
                 RepositoryEvent.status == RepositoryEventStatus.PENDING,
-                or_(
-                    RepositoryEvent.repository_path == service.repository_path,
-                    RepositoryEvent.repository_path == service.jury_repository_path,
-                ),
+                RepositoryEvent.repository_path.in_(repository_paths),
             )
             .values(
                 status=RepositoryEventStatus.PROCESSING,
@@ -344,21 +403,26 @@ def _claim_repository_batch() -> RepositoryBatch | None:
                 message="Repository check started.",
             )
         )
-        event_ids = tuple(
-            session.scalars(
-                select(RepositoryEvent.id)
-                .where(RepositoryEvent.processing_token == claim_token)
-                .order_by(RepositoryEvent.id)
-            ).all()
-        )
-        if not event_ids:
+        claimed_events = session.scalars(
+            select(RepositoryEvent)
+            .where(RepositoryEvent.processing_token == claim_token)
+            .order_by(RepositoryEvent.id)
+        ).all()
+        if not claimed_events:
             session.rollback()
             return None
+        event_ids = tuple(claimed_event.id for claimed_event in claimed_events)
+        latest_commits = {
+            claimed_event.repository_path: claimed_event.commit_sha
+            for claimed_event in claimed_events
+        }
         session.commit()
         return RepositoryBatch(
-            event_ids,
-            service.id,
-            service.repository_generation,
+            event_ids=event_ids,
+            service_id=service.id,
+            repository_generation=service.repository_generation,
+            source_commit=latest_commits.get(service.repository_path),
+            jury_commit=latest_commits.get(service.jury_repository_path or ""),
         )
 
 
@@ -410,6 +474,15 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
         service = session.get(Service, batch.service_id)
         if player is None or service is None or not batch.repository_path or not batch.commit_sha:
             _finish_events(session, batch.event_ids, RepositoryEventStatus.FAILED, "Participant repository is unavailable.")
+            session.commit()
+            return True
+        if _batch_is_superseded(session, batch):
+            _finish_events(
+                session,
+                batch.event_ids,
+                RepositoryEventStatus.DONE,
+                "Superseded by a newer push.",
+            )
             session.commit()
             return True
         is_attack = batch.repository_path == player.attack_repository_path
@@ -492,7 +565,21 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
             contract = ServiceContractResult(True, "Canonical runtime contract.", service.runtime_source_commit, service.runtime_jury_commit, service.container_port, service.healthcheck_path)
             runtime = run_service_runtime_check(settings, repository_path=service.repository_path, jury_repository_path=jury_path, contract=contract, exploit_repository_path=repository_path, exploit_commit=batch.commit_sha, exploit_runtime_requirements=attack_requirements, cache_service_image=True)
         else:
-            contract = validate_service_contract(settings, repository_path=repository_path, jury_repository_path=jury_path, default_branch=service.default_branch)
+            jury_commit = (
+                service.runtime_jury_commit or service.validated_jury_commit
+            )
+            if not jury_commit:
+                raise RunnerError(
+                    "The canonical jury commit is unavailable; validate the service first."
+                )
+            contract = validate_service_contract(
+                settings,
+                repository_path=repository_path,
+                jury_repository_path=jury_path,
+                default_branch=service.default_branch,
+                source_commit=batch.commit_sha,
+                jury_commit=jury_commit,
+            )
             if not contract.valid:
                 raise RunnerError(contract.message)
             runtime = run_service_runtime_check(settings, repository_path=repository_path, jury_repository_path=jury_path, contract=contract)
@@ -503,9 +590,25 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
         error_message = ""
 
     with SessionLocal() as session:
-        player = session.get(ParticipantService, batch.participant_service_id)
+        # Serialize the final result with webhook status updates. Without the
+        # row lock, a push can be inserted after the superseded check and its
+        # RUNNING state can then be overwritten by this older batch.
+        player = session.scalar(
+            select(ParticipantService)
+            .where(ParticipantService.id == batch.participant_service_id)
+            .with_for_update()
+        )
         if player is None:
             _finish_events(session, batch.event_ids, RepositoryEventStatus.DONE, "Participant service no longer exists.")
+            session.commit()
+            return True
+        if _batch_is_superseded(session, batch):
+            _finish_events(
+                session,
+                batch.event_ids,
+                RepositoryEventStatus.DONE,
+                "Superseded by a newer push.",
+            )
             session.commit()
             return True
         scoring = get_scoring_settings(session)
@@ -606,6 +709,20 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
         _finish_events(session, batch.event_ids, RepositoryEventStatus.DONE, message)
         session.commit()
     return True
+
+
+def _batch_is_superseded(session, batch: RepositoryBatch) -> bool:
+    if not batch.repository_path or not batch.event_ids:
+        return False
+    newer_event = session.scalar(
+        select(RepositoryEvent.id)
+        .where(
+            RepositoryEvent.repository_path == batch.repository_path,
+            RepositoryEvent.id > max(batch.event_ids),
+        )
+        .limit(1)
+    )
+    return newer_event is not None
 
 
 def _finish_events(

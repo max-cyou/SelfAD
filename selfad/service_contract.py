@@ -31,22 +31,26 @@ def validate_service_contract(
     repository_path: str,
     jury_repository_path: str,
     default_branch: str,
+    source_commit: str | None = None,
+    jury_commit: str | None = None,
 ) -> ServiceContractResult:
     service_repository = get_repository(settings, repository_path)
     jury_repository = get_repository(settings, jury_repository_path)
     if service_repository.empty or jury_repository.empty:
         return _failed("Push files to both repositories before validation.")
 
-    source_commit = get_branch_commit(
-        settings,
-        repository_path,
-        branch=default_branch,
-    )
-    jury_commit = get_branch_commit(
-        settings,
-        jury_repository_path,
-        branch=default_branch,
-    )
+    if source_commit is None:
+        source_commit = get_branch_commit(
+            settings,
+            repository_path,
+            branch=default_branch,
+        )
+    if jury_commit is None:
+        jury_commit = get_branch_commit(
+            settings,
+            jury_repository_path,
+            branch=default_branch,
+        )
 
     try:
         dockerfile = get_repository_file(
