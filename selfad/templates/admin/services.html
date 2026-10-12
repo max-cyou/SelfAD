@@ -1,0 +1,12 @@
+<section
+  class="admin-panel services-panel"
+  id="services"
+  role="tabpanel"
+  aria-labelledby="admin-tab-services services-title"
+  data-admin-panel="services"
+  {% if active_section != 'services' %}hidden{% endif %}
+>
+  {% include "admin/services/list.html" %}
+
+  {% include "admin/services/editor.html" %}
+</section>

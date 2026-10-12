@@ -1,0 +1,23 @@
+{% set scoring_fields = ['attack_reward_mode', 'attack_max_points', 'attack_points_per_flag', 'defense_reward_mode', 'defense_max_points', 'defense_points_lost_per_flag', 'penalty_mode', 'attack_penalty_value', 'defense_penalty_value', 'attack_free_failures', 'defense_free_failures', 'penalize_check_errors', 'stdout_noise_mode', 'stdout_noise_penalty_percent'] %}
+<details class="settings-module" id="settings-scoring"{% if general_errors.keys() | select('in', scoring_fields) | list %} open{% endif %}>
+  <summary>
+    <span>Scoring</span>
+    <span class="settings-module-summary" data-scoring-summary>Attack {{ general_form.attack_max_points }} / Defense {{ general_form.defense_max_points }}</span>
+  </summary>
+  <div class="settings-module-body">
+    <div class="scoring-rewards">
+      {% include "admin/general/attack.html" %}
+      {% include "admin/general/defense.html" %}
+    </div>
+    {% set penalty_fields = ['penalty_mode', 'attack_penalty_value', 'defense_penalty_value', 'attack_free_failures', 'defense_free_failures', 'penalize_check_errors', 'stdout_noise_mode', 'stdout_noise_penalty_percent'] %}
+    <details class="settings-module settings-module--nested" id="settings-penalties"{% if general_errors.keys() | select('in', penalty_fields) | list %} open{% endif %}>
+      <summary>
+        <span>Penalties &amp; output</span>
+        <span class="settings-module-summary" data-penalty-summary>{{ 'Disabled' if general_form.penalty_mode == 'none' else general_form.penalty_mode | replace('_', ' ') | capitalize }}</span>
+      </summary>
+      <div class="settings-module-body">
+        {% include "admin/general/penalties.html" %}
+      </div>
+    </details>
+  </div>
+</details>

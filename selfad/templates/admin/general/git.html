@@ -1,0 +1,18 @@
+<details class="settings-module" id="settings-git">
+  <summary>
+    <span>Git interface</span>
+    <span class="settings-module-summary" data-git-summary>Gitea web access {{ 'enabled' if general_form.gitea_public_enabled else 'disabled' }}</span>
+  </summary>
+  <div class="settings-module-body">
+    <div class="registration-modes">
+      <div class="registration-mode">
+        <label class="general-checkbox">
+          <input name="gitea_public_enabled" type="checkbox"{% if general_form.gitea_public_enabled %} checked{% endif %}>
+          <span>Expose Gitea web interface</span>
+        </label>
+        <p>Allow public HTTPS access to Gitea. Git over SSH and the built-in editor continue to work when this is disabled.</p>
+      </div>
+    </div>
+
+  </div>
+</details>

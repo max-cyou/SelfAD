@@ -1,0 +1,26 @@
+<section class="scoring-group" aria-labelledby="attack-scoring-title">
+        <div class="scoring-group-heading">
+          <h3 id="attack-scoring-title">Attack rewards</h3>
+          <p>Points for flags recovered by the participant exploit.</p>
+        </div>
+        <div class="scoring-fields">
+          <label class="scoring-field{% if general_errors.get('attack_reward_mode') %} scoring-field--error{% endif %}">
+            <span>Calculation</span>
+            <select name="attack_reward_mode" data-attack-reward-mode>
+              <option value="coverage"{% if general_form.attack_reward_mode == 'coverage' %} selected{% endif %}>Percentage recovered</option>
+              <option value="per_flag"{% if general_form.attack_reward_mode == 'per_flag' %} selected{% endif %}>Points per flag</option>
+            </select>
+            <small>{{ general_errors.get('attack_reward_mode') or 'Percentage scales the result against the maximum.' }}</small>
+          </label>
+          <label class="scoring-field{% if general_errors.get('attack_max_points') %} scoring-field--error{% endif %}">
+            <span>Maximum points</span>
+            <input name="attack_max_points" type="number" min="1" max="1000000" step="1" value="{{ general_form.attack_max_points }}" required data-attack-maximum>
+            <small>{{ general_errors.get('attack_max_points') or 'Hard cap for one service.' }}</small>
+          </label>
+          <label class="scoring-field{% if general_errors.get('attack_points_per_flag') %} scoring-field--error{% endif %}" data-attack-per-flag-field>
+            <span>Points per recovered flag</span>
+            <input name="attack_points_per_flag" type="number" min="0" max="1000000" step="1" value="{{ general_form.attack_points_per_flag }}" required>
+            <small>{{ general_errors.get('attack_points_per_flag') or 'Used only in points-per-flag mode.' }}</small>
+          </label>
+        </div>
+      </section>

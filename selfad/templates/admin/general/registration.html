@@ -1,0 +1,28 @@
+<div class="settings-subsection-title"><span>Registration</span></div>
+    {% if general_errors.get('registration_invite_code') %}
+      <p class="general-settings-error" role="alert">{{ general_errors.registration_invite_code }}</p>
+    {% endif %}
+    <div class="registration-modes">
+      <div class="registration-mode">
+        <label class="general-checkbox">
+          <input name="registration_enabled" type="checkbox"{% if general_form.registration_enabled %} checked{% endif %}>
+          <span>Enable registration</span>
+        </label>
+        <p>Show public registration on the sign-in page.</p>
+      </div>
+      <div class="registration-mode registration-mode--invite">
+        <label class="general-checkbox">
+          <input name="registration_invite_only" type="checkbox"{% if general_form.registration_invite_only %} checked{% endif %}>
+          <span>Require invite code</span>
+        </label>
+        <input
+          aria-label="Invite code"
+          name="registration_invite_code"
+          type="password"
+          minlength="4"
+          maxlength="128"
+          placeholder="{% if registration_invite_code_configured %}Leave blank to keep current code{% else %}Set invite code{% endif %}"
+          autocomplete="new-password"
+        >
+      </div>
+    </div>

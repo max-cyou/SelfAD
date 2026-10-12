@@ -1,0 +1,57 @@
+<section class="scoring-group" aria-labelledby="penalty-scoring-title">
+        <div class="scoring-group-heading">
+          <h3 id="penalty-scoring-title">Unsuccessful submission penalty</h3>
+          <p>Applied to later improved results. Build, contract and runtime errors can also add debt.</p>
+        </div>
+        <div class="scoring-fields scoring-fields--penalty">
+          <label class="scoring-field{% if general_errors.get('penalty_mode') %} scoring-field--error{% endif %}">
+            <span>Penalty unit</span>
+            <select name="penalty_mode" data-penalty-mode>
+              <option value="compound_percent"{% if general_form.penalty_mode == 'compound_percent' %} selected{% endif %}>Compounding percent of potential score</option>
+              <option value="percent"{% if general_form.penalty_mode == 'percent' %} selected{% endif %}>Linear percent of raw result</option>
+              <option value="points"{% if general_form.penalty_mode == 'points' %} selected{% endif %}>Fixed points</option>
+              <option value="none"{% if general_form.penalty_mode == 'none' %} selected{% endif %}>Disabled</option>
+            </select>
+            <small>{{ general_errors.get('penalty_mode') or 'Compounding 50% becomes 50%, 75%, 87.5%… after successive failures.' }}</small>
+          </label>
+          <label class="scoring-field{% if general_errors.get('attack_penalty_value') %} scoring-field--error{% endif %}">
+            <span>Attack penalty per failure</span>
+            <input name="attack_penalty_value" type="number" min="0" step="0.1" value="{{ general_form.attack_penalty_value }}" required data-attack-penalty>
+            <small>{{ general_errors.get('attack_penalty_value') or 'Percent or points, according to the selected unit.' }}</small>
+          </label>
+          <label class="scoring-field{% if general_errors.get('defense_penalty_value') %} scoring-field--error{% endif %}">
+            <span>Defense penalty per failure</span>
+            <input name="defense_penalty_value" type="number" min="0" step="0.1" value="{{ general_form.defense_penalty_value }}" required data-defense-penalty>
+            <small>{{ general_errors.get('defense_penalty_value') or 'Percent or points, according to the selected unit.' }}</small>
+          </label>
+          <label class="scoring-field{% if general_errors.get('attack_free_failures') %} scoring-field--error{% endif %}">
+            <span>Free attack failures</span>
+            <input name="attack_free_failures" type="number" min="0" max="10000" step="1" value="{{ general_form.attack_free_failures }}" required data-attack-free>
+            <small>{{ general_errors.get('attack_free_failures') or 'Ignored before attack penalty starts.' }}</small>
+          </label>
+          <label class="scoring-field{% if general_errors.get('defense_free_failures') %} scoring-field--error{% endif %}">
+            <span>Free defense failures</span>
+            <input name="defense_free_failures" type="number" min="0" max="10000" step="1" value="{{ general_form.defense_free_failures }}" required data-defense-free>
+            <small>{{ general_errors.get('defense_free_failures') or 'Ignored before defense penalty starts.' }}</small>
+          </label>
+          <label class="scoring-check">
+            <input name="penalize_check_errors" type="checkbox"{% if general_form.penalize_check_errors %} checked{% endif %}>
+            <span>Count contract, build, healthcheck and runtime errors as unsuccessful submissions</span>
+          </label>
+          <label class="scoring-field{% if general_errors.get('stdout_noise_mode') %} scoring-field--error{% endif %}">
+            <span>Non-flag stdout</span>
+            <select name="stdout_noise_mode" data-stdout-noise-mode>
+              <option value="ignore"{% if general_form.stdout_noise_mode == 'ignore' %} selected{% endif %}>Ignore</option>
+              <option value="unsuccessful"{% if general_form.stdout_noise_mode == 'unsuccessful' %} selected{% endif %}>Count as unsuccessful submission</option>
+              <option value="percent_penalty"{% if general_form.stdout_noise_mode == 'percent_penalty' %} selected{% endif %}>Apply an extra percentage cost</option>
+            </select>
+            <small>{{ general_errors.get('stdout_noise_mode') or 'Only attack stdout is checked; diagnostics belong in stderr.' }}</small>
+          </label>
+          <label class="scoring-field" data-stdout-noise-penalty-field{% if general_form.stdout_noise_mode != 'percent_penalty' %} hidden{% endif %}>
+            <span>Extra cost per noisy result</span>
+            <input name="stdout_noise_penalty_percent" type="number" min="0" max="100" step="0.1" value="{{ general_form.stdout_noise_penalty_percent }}" required data-stdout-noise-penalty>
+            <small>{{ general_errors.get('stdout_noise_penalty_percent') or 'Percent of this result, added after all accumulated penalties.' }}</small>
+          </label>
+        </div>
+        <div class="scoring-preview" data-scoring-preview aria-live="polite"></div>
+      </section>

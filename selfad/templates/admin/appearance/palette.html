@@ -1,0 +1,52 @@
+<dialog class="appearance-dialog appearance-dialog--palette" id="appearance-palette" data-appearance-dialog="palette">
+    <div class="appearance-editor">
+      <div class="appearance-editor-heading">
+        <div>
+          <h3>Interface palette</h3>
+          <p>Every interface color is editable. Use six-digit HEX values.</p>
+        </div>
+        <button class="appearance-dialog-close" type="button" aria-label="Close palette" data-appearance-close>×</button>
+      </div>
+      <div class="palette-groups">
+        {% for group_name, field_names in palette_groups %}
+          <section class="palette-group" aria-labelledby="palette-group-{{ loop.index }}">
+            <h4 id="palette-group-{{ loop.index }}">{{ group_name }}</h4>
+            <div class="palette-fields">
+              {% for name in field_names %}
+                {% set field = palette_fields[name] %}
+                <div class="palette-field{% if errors.get(name) %} palette-field--error{% endif %}">
+                  <label for="{{ name }}">{{ field.label }}</label>
+                  <div class="color-value">
+                    <input
+                      class="color-picker"
+                      type="color"
+                      value="{{ form_values[name] }}"
+                      aria-label="Choose {{ field.label | lower }}"
+                      data-color-picker
+                    >
+                    <input
+                      id="{{ name }}"
+                      name="{{ name }}"
+                      type="text"
+                      value="{{ form_values[name] }}"
+                      maxlength="7"
+                      pattern="#[0-9A-Fa-f]{6}"
+                      spellcheck="false"
+                      required
+                      data-color-value
+                      data-css-variable="{{ field.css_variable }}"
+                    >
+                  </div>
+                  {% if errors.get(name) %}<small>{{ errors[name] }}</small>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          </section>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="appearance-dialog-actions">
+      <button type="button" data-appearance-close>Cancel</button>
+      <button class="save-appearance" type="submit" data-appearance-save="palette">Save palette</button>
+    </div>
+    </dialog>

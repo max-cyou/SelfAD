@@ -1,0 +1,40 @@
+<section
+  class="admin-panel appearance-panel"
+  id="appearance"
+  role="tabpanel"
+  aria-labelledby="admin-tab-appearance appearance-title"
+  data-admin-panel="appearance"
+  {% if active_section != 'appearance' %}hidden{% endif %}
+>
+  <div class="panel-heading">
+    <div>
+      <h2 id="appearance-title">Appearance</h2>
+      <p>Colors and public page templates.</p>
+    </div>
+    {% if saved %}<span class="saved-label">Saved</span>{% endif %}
+  </div>
+
+  <form class="appearance-form" method="post" action="{{ url_for('update_appearance') }}" data-appearance-form>
+    <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+    <input name="appearance_mode" type="hidden" value="{{ appearance_mode }}" data-appearance-mode>
+
+    {% include "admin/appearance/identity.html" %}
+
+    <div class="appearance-launchers" aria-label="Appearance editors">
+      <button
+        type="button"
+        aria-controls="appearance-palette"
+        data-appearance-open="palette"
+      >Change palette</button>
+      <button
+        type="button"
+        aria-controls="appearance-templates"
+        data-appearance-open="templates"
+      >Change templates</button>
+    </div>
+
+    {% include "admin/appearance/palette.html" %}
+
+    {% include "admin/appearance/templates.html" %}
+  </form>
+</section>

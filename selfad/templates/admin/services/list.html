@@ -1,0 +1,97 @@
+<section class="service-block service-list-block" aria-labelledby="services-title">
+    <div class="panel-heading services-list-heading">
+      <div>
+        <h2 id="services-title">Service repositories</h2>
+        <p>{{ services | length }} configured service{% if services | length != 1 %}s{% endif %}.</p>
+      </div>
+      <div class="services-heading-actions">
+        <a href="#service-editor" data-new-service>New service</a>
+      </div>
+    </div>
+
+    {% if services %}
+      <div class="admin-table-wrap" tabindex="0" role="region" aria-label="Scrollable administration table">
+        <table class="admin-table service-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Slug</th>
+              <th>Status</th>
+              <th>Repositories</th>
+              <th>Checks</th>
+              <th><span class="visually-hidden">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for service in services %}
+              <tr>
+                <td>
+                  <strong>{{ service.name }}</strong>
+                  <small>{{ issued_counts.get(service.id, 0) }} issued</small>
+                </td>
+                <td><code>{{ service.slug }}</code></td>
+                <td><span class="table-state table-state--{{ service.status.value }}">{{ service.status.value | replace('_', ' ') }}</span></td>
+                <td>
+                  <div class="repo-pair">
+                    {% if gitea_public_enabled %}<a href="{{ gitea_public_url }}/{{ service.repository_path }}" target="_blank" rel="noopener noreferrer">service ↗</a>{% else %}<span>service hidden</span>{% endif %}
+                    {% if service.jury_repository_path and gitea_public_enabled %}<a href="{{ gitea_public_url }}/{{ service.jury_repository_path }}" target="_blank" rel="noopener noreferrer">jury ↗</a>{% elif service.jury_repository_path %}<span>jury hidden</span>{% else %}<span>jury —</span>{% endif %}
+                  </div>
+                </td>
+                <td>
+                  <div class="check-dots" aria-label="Repository checks">
+                    <span
+                      class="check-dot check-dot--{{ service.validation_status.value }}"
+                      tabindex="0"
+                      title="Contract: {{ service.validation_status.value }} — {{ service.validation_message }}"
+                      data-tooltip="Contract: {{ service.validation_status.value }} — {{ service.validation_message }}{% if pending_pushes.get(service.id) %} ({{ pending_pushes[service.id] }} push events queued){% endif %}"
+                      aria-label="Contract {{ service.validation_status.value }}"
+                    ></span>
+                    <span
+                      class="check-dot check-dot--{{ service.runtime_status.value }}"
+                      tabindex="0"
+                      title="Runtime: {{ service.runtime_status.value }} — {{ service.runtime_message }}"
+                      data-tooltip="Runtime: {{ service.runtime_status.value }} — {{ service.runtime_message }}{% if service.runtime_matches %} ({{ service.runtime_matches }} matching flags){% endif %}"
+                      aria-label="Runtime {{ service.runtime_status.value }}"
+                    ></span>
+                  </div>
+                </td>
+                <td>
+                  <div class="table-actions">
+                    {% if service.status.value == 'ready_to_issue' and service.runtime_status.value == 'passed' %}
+                      <form method="post" action="{{ url_for('issue_participant_repositories', service_id=service.id) }}">
+                        <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+                        <button type="submit">Issue privately</button>
+                      </form>
+                    {% endif %}
+                    <form method="post" action="{{ url_for('validate_service', service_id=service.id) }}">
+                      <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+                      <button type="submit">Validate</button>
+                    </form>
+                    <button
+                      type="button"
+                      data-service-edit
+                      data-update-action="{{ url_for('update_service', service_id=service.id) }}"
+                      data-name="{{ service.name }}"
+                      data-slug="{{ service.slug }}"
+                      data-default-branch="{{ service.default_branch }}"
+                      data-status="{{ service.status.value }}"
+                      data-description="{{ service.description }}"
+                    >Edit</button>
+                    <form method="post" action="{{ url_for('delete_service', service_id=service.id) }}" data-delete-service="{{ service.name }}">
+                      <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+                      <button class="table-button--danger" type="submit">Delete</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="services-empty">
+        <p>No service repositories yet.</p>
+        <a href="#service-editor" data-new-service>Create the first service</a>
+      </div>
+    {% endif %}
+  </section>

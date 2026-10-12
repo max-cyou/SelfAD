@@ -1,0 +1,44 @@
+<aside class="admin-sidebar">
+  <nav class="admin-section-nav" aria-label="Admin sections" role="tablist" aria-orientation="vertical">
+    <button
+      id="admin-tab-general"
+      class="{% if active_section == 'general' %}active{% endif %}"
+      type="button"
+      role="tab"
+      aria-controls="general"
+      aria-selected="{{ 'true' if active_section == 'general' else 'false' }}"
+      tabindex="{{ 0 if active_section == 'general' else -1 }}"
+      data-admin-tab="general"
+    >General</button>
+    <button
+      id="admin-tab-services"
+      class="{% if active_section == 'services' %}active{% endif %}"
+      type="button"
+      role="tab"
+      aria-controls="services"
+      aria-selected="{{ 'true' if active_section == 'services' else 'false' }}"
+      tabindex="{{ 0 if active_section == 'services' else -1 }}"
+      data-admin-tab="services"
+    >Services</button>
+    <button
+      id="admin-tab-users"
+      class="{% if active_section == 'users' %}active{% endif %}"
+      type="button"
+      role="tab"
+      aria-controls="users"
+      aria-selected="{{ 'true' if active_section == 'users' else 'false' }}"
+      tabindex="{{ 0 if active_section == 'users' else -1 }}"
+      data-admin-tab="users"
+    >Users</button>
+    <button
+      id="admin-tab-appearance"
+      class="{% if active_section == 'appearance' %}active{% endif %}"
+      type="button"
+      role="tab"
+      aria-controls="appearance"
+      aria-selected="{{ 'true' if active_section == 'appearance' else 'false' }}"
+      tabindex="{{ 0 if active_section == 'appearance' else -1 }}"
+      data-admin-tab="appearance"
+    >Appearance</button>
+  </nav>
+</aside>

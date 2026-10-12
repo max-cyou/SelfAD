@@ -53,6 +53,13 @@
     const stdoutNoiseMode = scoringSettings.querySelector("[data-stdout-noise-mode]");
     const stdoutNoisePenaltyField = scoringSettings.querySelector("[data-stdout-noise-penalty-field]");
     const preview = scoringSettings.querySelector("[data-scoring-preview]");
+    const scoringSummary = scoringSettings.querySelector("[data-scoring-summary]");
+    const penaltySummary = scoringSettings.querySelector("[data-penalty-summary]");
+    const runtimeSummary = scoringSettings.querySelector("[data-runtime-summary]");
+    const gitSummary = scoringSettings.querySelector("[data-git-summary]");
+    const requirements = scoringSettings.querySelector('[name="attack_requirements"]');
+    const userRequirements = scoringSettings.querySelector('[name="allow_user_attack_requirements"]');
+    const publicGit = scoringSettings.querySelector('[name="gitea_public_enabled"]');
 
     const numericValue = (control) => {
       const value = Number(control?.value);
@@ -85,6 +92,29 @@
 
       const attackRaw = numericValue(attackMaximum);
       const defenseRaw = numericValue(defenseMaximum);
+      if (scoringSummary) {
+        scoringSummary.textContent = `Attack ${attackMaximum.value} / Defense ${defenseMaximum.value}`;
+      }
+      if (penaltySummary) {
+        const names = { compound_percent: "Compounding", percent: "Linear", points: "Fixed" };
+        const unit = percentageMode ? "%" : " pts";
+        const attackValue = numericValue(attackPenalty);
+        const defenseValue = numericValue(defensePenalty);
+        const values = attackValue === defenseValue
+          ? `${attackValue}${unit}`
+          : `Attack ${attackValue}${unit} / Defense ${defenseValue}${unit}`;
+        penaltySummary.textContent = penaltyMode.value === "none"
+          ? "Disabled"
+          : `${names[penaltyMode.value]} ${values}`;
+      }
+      if (runtimeSummary) {
+        runtimeSummary.textContent = (requirements.value.trim()
+          ? "Fixed dependencies"
+          : "Python standard library") + (userRequirements.checked ? " + participant packages" : "");
+      }
+      if (gitSummary) {
+        gitSummary.textContent = `Gitea web access ${publicGit.checked ? "enabled" : "disabled"}`;
+      }
       const attackResult = exampleScore(
         attackRaw,
         numericValue(attackPenalty),
@@ -100,11 +130,19 @@
         : `Example after 2 unsuccessful submissions: attack ${attackResult}/${Math.round(attackRaw)} pts, defense ${defenseResult}/${Math.round(defenseRaw)} pts. Already awarded points never decrease.`;
     };
 
-    scoringSettings.querySelectorAll("input, select").forEach((control) => {
+    scoringSettings.querySelectorAll("input, select, textarea").forEach((control) => {
       control.addEventListener("input", updateScoringPreview);
       control.addEventListener("change", updateScoringPreview);
     });
     updateScoringPreview();
+    // Reveal invalid controls before the browser tries to focus them.
+    scoringSettings.addEventListener("invalid", (event) => {
+      let parent = event.target.parentElement;
+      while (parent && parent !== scoringSettings) {
+        if (parent.tagName === "DETAILS") parent.open = true;
+        parent = parent.parentElement;
+      }
+    }, true);
   }
 
   const tabs = Array.from(document.querySelectorAll("[data-admin-tab]"));
@@ -323,6 +361,13 @@
   const userSubmit = document.querySelector("[data-user-submit]");
   const userCancel = document.querySelector("[data-user-cancel]");
   const userEditor = document.querySelector(".participant-section");
+  const userAdd = document.querySelector("[data-user-add]");
+
+  const showUserEditor = () => {
+    userEditor.hidden = false;
+    userAdd?.setAttribute("aria-expanded", "true");
+    userEditor.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
 
   const resetUserForm = () => {
     if (!userForm) return;
@@ -340,8 +385,14 @@
     userFormDescription.textContent =
       "Creates participant access. Admin is only an additional interface role.";
     userSubmit.textContent = "Create user";
-    userCancel.hidden = true;
   };
+
+  userAdd?.addEventListener("click", () => {
+    if (!userForm || !userEditor) return;
+    resetUserForm();
+    showUserEditor();
+    userForm.elements.namedItem("username").focus({ preventScroll: true });
+  });
 
   document.querySelectorAll("[data-user-edit]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -361,16 +412,17 @@
         ? "Update account access and credentials. An SSH key is already added."
         : "Update account access and optionally add an SSH key.";
       userSubmit.textContent = "Save changes";
-      userCancel.hidden = false;
-      userEditor.scrollIntoView({ block: "start" });
-      userForm.elements.namedItem("email").focus();
+      showUserEditor();
+      userForm.elements.namedItem("email").focus({ preventScroll: true });
     });
   });
 
   if (userCancel && userForm) {
     userCancel.addEventListener("click", () => {
       resetUserForm();
-      userForm.elements.namedItem("username").focus();
+      userEditor.hidden = true;
+      userAdd?.setAttribute("aria-expanded", "false");
+      userAdd?.focus();
     });
   }
 

@@ -1,0 +1,27 @@
+<section class="participant-section" id="user-editor" aria-labelledby="participants-title"{% if not participant_errors and not user_edit_id %} hidden{% endif %}>
+    <div class="panel-heading">
+      <div>
+        <h3 id="participants-title" data-user-form-title>{% if user_edit_id %}Edit user{% else %}Create user{% endif %}</h3>
+        <p data-user-form-description>{% if user_edit_id %}Update account access and credentials.{% else %}Creates participant access. Admin is only an additional interface role.{% endif %}</p>
+      </div>
+      <button class="service-cancel" type="button" data-user-cancel>Cancel</button>
+    </div>
+    <form
+      class="service-form"
+      method="post"
+      action="{% if user_edit_id %}{{ url_for('update_user', user_id=user_edit_id) }}{% else %}{{ url_for('create_participant') }}{% endif %}?users_page={{ users_page }}{% if users_search %}&users_search={{ users_search }}{% endif %}"
+      data-user-form
+      data-create-action="{{ url_for('create_participant') }}?users_page={{ users_page }}{% if users_search %}&users_search={{ users_search }}{% endif %}"
+    >
+      <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+      {% if participant_errors.get('_form') %}<p class="inline-error">{{ participant_errors['_form'] }}</p>{% endif %}
+      <div class="service-fields">
+        <div class="field{% if participant_errors.get('username') %} field--error{% endif %}"><label for="participant-username">Username</label><input id="participant-username" name="username" value="{{ participant_form.username }}" maxlength="32"{% if user_edit_id %} readonly{% endif %} required>{% if participant_errors.get('username') %}<small>{{ participant_errors.username }}</small>{% endif %}</div>
+        <div class="field{% if participant_errors.get('email') %} field--error{% endif %}"><label for="participant-email">Email</label><input id="participant-email" name="email" type="email" value="{{ participant_form.email }}" required>{% if participant_errors.get('email') %}<small>{{ participant_errors.email }}</small>{% endif %}</div>
+        <div class="field{% if participant_errors.get('role') %} field--error{% endif %}"><label for="participant-role">Role</label><select id="participant-role" name="role" required><option value="user"{% if participant_form.role == 'user' %} selected{% endif %}>User</option><option value="admin"{% if participant_form.role == 'admin' %} selected{% endif %}>Admin</option></select>{% if participant_errors.get('role') %}<small>{{ participant_errors.role }}</small>{% endif %}</div>
+        <div class="field{% if participant_errors.get('password') %} field--error{% endif %}"><label for="participant-password">Password</label><input id="participant-password" name="password" type="password" minlength="10"{% if not user_edit_id %} required{% endif %}><small>{{ participant_errors.get('password') or ('Leave blank to keep the current password.' if user_edit_id else 'Used for both SelfAD and Gitea.') }}</small></div>
+        <div class="field service-field--wide{% if participant_errors.get('ssh_public_key') %} field--error{% endif %}"><label for="participant-key">SSH public key</label><textarea id="participant-key" name="ssh_public_key" rows="2"{% if not user_edit_id %} required{% endif %}>{{ participant_form.ssh_public_key }}</textarea><small>{{ participant_errors.get('ssh_public_key') or ('Leave blank to keep the existing key.' if user_edit_id else 'Required for Git over SSH.') }}</small></div>
+      </div>
+      <div class="service-form-actions"><button type="submit" data-user-submit>{% if user_edit_id %}Save changes{% else %}Create user{% endif %}</button></div>
+    </form>
+  </section>

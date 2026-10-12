@@ -1,0 +1,50 @@
+<dialog class="appearance-dialog appearance-dialog--templates" id="appearance-templates" data-appearance-dialog="templates">
+    <div class="appearance-editor">
+      <div class="appearance-editor-heading">
+        <div>
+          <h3>Main page templates</h3>
+          <p>Raw HTML rendered in the centered area of the public home page.</p>
+        </div>
+        <button class="appearance-dialog-close" type="button" aria-label="Close templates" data-appearance-close>×</button>
+      </div>
+      <section class="template-settings-section">
+        <div class="template-section-heading">
+          <h3>Not started main page</h3>
+          <p>Shown until the contest starts.</p>
+        </div>
+        <div class="field homepage-html-field{% if errors.get('not_started_homepage_html') %} field--error{% endif %}">
+          <label for="not-started-homepage-html">HTML</label>
+          <textarea id="not-started-homepage-html" name="not_started_homepage_html" maxlength="20000" rows="11" spellcheck="false" required>{{ form_values.not_started_homepage_html }}</textarea>
+          <small>{{ errors.get('not_started_homepage_html') or 'Rendered inside the centered main block.' }}</small>
+        </div>
+      </section>
+
+      <section class="template-settings-section">
+        <div class="template-section-heading">
+          <h3>Started main page</h3>
+          <p>Shown after manual or automatic contest start.</p>
+        </div>
+        <div class="field homepage-html-field{% if errors.get('started_homepage_html') %} field--error{% endif %}">
+          <label for="started-homepage-html">HTML</label>
+          <textarea id="started-homepage-html" name="started_homepage_html" maxlength="20000" rows="11" spellcheck="false" required>{{ form_values.started_homepage_html }}</textarea>
+          <small>{{ errors.get('started_homepage_html') or 'Rendered inside the centered main block.' }}</small>
+        </div>
+      </section>
+
+      <section class="template-settings-section">
+        <div class="template-section-heading">
+          <h3>Ended main page</h3>
+          <p>Shown after the contest is ended. Only the scoreboard remains public.</p>
+        </div>
+        <div class="field homepage-html-field{% if errors.get('ended_homepage_html') %} field--error{% endif %}">
+          <label for="ended-homepage-html">HTML</label>
+          <textarea id="ended-homepage-html" name="ended_homepage_html" maxlength="20000" rows="11" spellcheck="false" required>{{ form_values.ended_homepage_html }}</textarea>
+          <small>{{ errors.get('ended_homepage_html') or 'Rendered inside the centered main block.' }}</small>
+        </div>
+      </section>
+    </div>
+    <div class="appearance-dialog-actions">
+      <button type="button" data-appearance-close>Cancel</button>
+      <button class="save-appearance" type="submit" data-appearance-save="templates">Save templates</button>
+    </div>
+    </dialog>

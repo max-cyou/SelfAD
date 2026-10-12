@@ -1,0 +1,26 @@
+<section class="scoring-group" aria-labelledby="defense-scoring-title">
+        <div class="scoring-group-heading">
+          <h3 id="defense-scoring-title">Defense rewards</h3>
+          <p>Starts from the maximum and loses points for leaked flags.</p>
+        </div>
+        <div class="scoring-fields">
+          <label class="scoring-field{% if general_errors.get('defense_reward_mode') %} scoring-field--error{% endif %}">
+            <span>Calculation</span>
+            <select name="defense_reward_mode" data-defense-reward-mode>
+              <option value="per_flag"{% if general_form.defense_reward_mode == 'per_flag' %} selected{% endif %}>Lost points per flag</option>
+              <option value="coverage"{% if general_form.defense_reward_mode == 'coverage' %} selected{% endif %}>Percentage protected</option>
+            </select>
+            <small>{{ general_errors.get('defense_reward_mode') or 'Percentage uses the share of flags not recovered.' }}</small>
+          </label>
+          <label class="scoring-field{% if general_errors.get('defense_max_points') %} scoring-field--error{% endif %}">
+            <span>Maximum points</span>
+            <input name="defense_max_points" type="number" min="1" max="1000000" step="1" value="{{ general_form.defense_max_points }}" required data-defense-maximum>
+            <small>{{ general_errors.get('defense_max_points') or 'Awarded when the jury exploit recovers nothing.' }}</small>
+          </label>
+          <label class="scoring-field{% if general_errors.get('defense_points_lost_per_flag') %} scoring-field--error{% endif %}" data-defense-per-flag-field>
+            <span>Lost points per leaked flag</span>
+            <input name="defense_points_lost_per_flag" type="number" min="0" max="1000000" step="1" value="{{ general_form.defense_points_lost_per_flag }}" required>
+            <small>{{ general_errors.get('defense_points_lost_per_flag') or 'Used only in lost-points-per-flag mode.' }}</small>
+          </label>
+        </div>
+      </section>

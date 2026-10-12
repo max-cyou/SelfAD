@@ -1,0 +1,51 @@
+<div class="settings-subsection-title"><span>Contest</span></div>
+    {% if general_errors.get('contest_starts_at_local') %}
+      <p class="general-settings-error" role="alert">{{ general_errors.contest_starts_at_local }}</p>
+    {% endif %}
+    {% if general_errors.get('contest_ends_at_local') %}
+      <p class="general-settings-error" role="alert">{{ general_errors.contest_ends_at_local }}</p>
+    {% endif %}
+    {% if general_errors.get('contest_state') %}
+      <p class="general-settings-error" role="alert">{{ general_errors.contest_state }}</p>
+    {% endif %}
+    <div class="contest-settings">
+      <div class="contest-setting">
+        <label for="contest-state">Contest state</label>
+        <select id="contest-state" name="contest_state">
+          <option value="not_started"{% if general_form.contest_state == 'not_started' %} selected{% endif %}>Not started</option>
+          <option value="started"{% if general_form.contest_state == 'started' %} selected{% endif %}>Started</option>
+          <option value="ended"{% if general_form.contest_state == 'ended' %} selected{% endif %}>Ended</option>
+        </select>
+      </div>
+      <div class="contest-setting contest-setting--scheduled">
+        <label for="contest-starts-at">Automatic start</label>
+        <div class="schedule-control">
+        <input
+          id="contest-starts-at"
+          name="contest_starts_at_local"
+          type="datetime-local"
+          value="{{ general_form.contest_starts_at_local }}"
+          data-utc-value="{{ general_form.contest_starts_at_utc }}"
+        >
+        <input id="browser-timezone" name="browser_timezone" type="hidden" value="UTC">
+        <small class="contest-timezone" title="UTC is used if timezone detection fails">
+          <span data-browser-timezone>UTC</span>
+        </small>
+        </div>
+      </div>
+      <div class="contest-setting contest-setting--scheduled">
+        <label for="contest-ends-at">Automatic stop</label>
+        <div class="schedule-control">
+        <input
+          id="contest-ends-at"
+          name="contest_ends_at_local"
+          type="datetime-local"
+          value="{{ general_form.contest_ends_at_local }}"
+          data-utc-value="{{ general_form.contest_ends_at_utc }}"
+        >
+        <small class="contest-timezone" title="UTC is used if timezone detection fails">
+          <span data-browser-timezone>UTC</span>
+        </small>
+        </div>
+      </div>
+    </div>

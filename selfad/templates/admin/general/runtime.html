@@ -1,0 +1,28 @@
+<details class="settings-module" id="settings-runtime"{% if general_errors.get('attack_requirements') or general_errors.get('allow_user_attack_requirements') %} open{% endif %}>
+  <summary>
+    <span>Attack runtime</span>
+    <span class="settings-module-summary" data-runtime-summary>{{ 'Fixed dependencies' if general_form.attack_requirements | trim else 'Python standard library' }}{% if general_form.allow_user_attack_requirements %} + participant packages{% endif %}</span>
+  </summary>
+  <div class="settings-module-body">
+    <section class="scoring-group" aria-labelledby="attack-runtime-title">
+        <div class="scoring-group-heading">
+          <h3 id="attack-runtime-title">Attack runtime</h3>
+          <p>Dependencies for participant exploit scripts. Participant Dockerfiles remain locked.</p>
+        </div>
+        <div class="scoring-fields">
+          <label class="scoring-field scoring-field--wide{% if general_errors.get('attack_requirements') %} scoring-field--error{% endif %}">
+            <span>Fixed requirements</span>
+            <textarea name="attack_requirements" rows="4" maxlength="65536" placeholder="requests==2.32.5">{{ general_form.attack_requirements }}</textarea>
+            <small>{{ general_errors.get('attack_requirements') or 'Installed for every attack script. Leave empty for the Python standard library only.' }}</small>
+          </label>
+          <label class="scoring-check">
+            <input name="allow_user_attack_requirements" type="checkbox"{% if general_form.allow_user_attack_requirements %} checked{% endif %}>
+            <span>Allow a participant <code>requirements.txt</code> in addition to the fixed list (pinned <code>package==version</code> lines only)</span>
+          </label>
+        </div>
+      </section>
+    {% if general_errors.get('allow_user_attack_requirements') %}
+      <p class="general-settings-error" role="alert">{{ general_errors.allow_user_attack_requirements }}</p>
+    {% endif %}
+  </div>
+</details>

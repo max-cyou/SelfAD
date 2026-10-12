@@ -1,0 +1,80 @@
+<section class="service-block service-editor-block" id="service-editor" aria-labelledby="service-editor-title">
+    <div class="panel-heading">
+      <div>
+        <h2 id="service-editor-title" data-service-form-title>{% if service_edit_id %}Edit service{% else %}Create service{% endif %}</h2>
+        <p data-service-form-description>{% if service_edit_id %}Update service metadata and availability.{% else %}Creates separate service and jury repositories in Gitea.{% endif %}</p>
+      </div>
+      <button class="service-cancel" type="button" data-service-cancel{% if not service_edit_id %} hidden{% endif %}>Cancel edit</button>
+    </div>
+
+    <form
+      class="service-form"
+      method="post"
+      action="{% if service_edit_id %}{{ url_for('update_service', service_id=service_edit_id) }}{% else %}{{ url_for('create_service') }}{% endif %}"
+      data-service-form
+      data-create-action="{{ url_for('create_service') }}"
+    >
+      <input name="csrf_token" type="hidden" value="{{ csrf_token }}">
+
+      {% if service_errors.get('_form') %}
+        <p class="inline-error" role="alert">{{ service_errors['_form'] }}</p>
+      {% endif %}
+
+      <div class="service-fields">
+        <div class="field{% if service_errors.get('name') %} field--error{% endif %}">
+          <label for="service-name">Name</label>
+          <input id="service-name" name="name" type="text" value="{{ service_form.name }}" maxlength="120" required>
+          {% if service_errors.get('name') %}<small>{{ service_errors.name }}</small>{% endif %}
+        </div>
+
+        <div class="field{% if service_errors.get('slug') %} field--error{% endif %}">
+          <label for="service-slug">Slug</label>
+          <input id="service-slug" name="slug" type="text" value="{{ service_form.slug }}" maxlength="64" placeholder="notes-service" spellcheck="false"{% if service_edit_id %} readonly{% endif %} required>
+          <small>{{ service_errors.get('slug') or 'Used in both repository paths.' }}</small>
+        </div>
+
+        {% if ssh_key_required %}
+          <div class="field service-field--wide{% if service_errors.get('ssh_public_key') %} field--error{% endif %}">
+            <label for="ssh-public-key">Administrator SSH public key</label>
+            <textarea id="ssh-public-key" name="ssh_public_key" maxlength="2048" rows="2" placeholder="ssh-ed25519 AAAA..." spellcheck="false">{{ service_form.ssh_public_key }}</textarea>
+            <small>{{ service_errors.get('ssh_public_key') or 'Only the public key. The private key never leaves your machine.' }}</small>
+          </div>
+        {% endif %}
+
+        <div class="field{% if service_errors.get('default_branch') %} field--error{% endif %}">
+          <label for="default-branch">Default branch</label>
+          <input id="default-branch" name="default_branch" type="text" value="{{ service_form.default_branch }}" maxlength="255" spellcheck="false"{% if service_edit_id %} readonly{% endif %} required>
+          {% if service_errors.get('default_branch') %}<small>{{ service_errors.default_branch }}</small>{% endif %}
+        </div>
+
+        <div class="field{% if service_errors.get('status') %} field--error{% endif %}">
+          <label for="service-status">Status</label>
+          <select id="service-status" name="status" required>
+            <option value="draft"{% if service_form.status == 'draft' %} selected{% endif %}>Draft</option>
+            <option value="ready_to_issue" data-publish-status{% if service_form.status == 'ready_to_issue' %} selected{% endif %}{% if not service_edit_id %} disabled{% endif %}>Ready to issue</option>
+            <option value="active" data-publish-status{% if service_form.status == 'active' %} selected{% endif %}{% if not service_edit_id %} disabled{% endif %}>Active</option>
+          </select>
+          <small>{{ service_errors.get('status') or 'Ready requires passing checks. Issue privately, then activate to publish access.' }}</small>
+        </div>
+
+        <div class="field service-field--wide{% if service_errors.get('description') %} field--error{% endif %}">
+          <label for="service-description">Description</label>
+          <textarea id="service-description" name="description" maxlength="4000" rows="3">{{ service_form.description }}</textarea>
+          {% if service_errors.get('description') %}<small>{{ service_errors.description }}</small>{% endif %}
+        </div>
+      </div>
+
+      <div class="contract-note">
+        <strong>Repository contract</strong>
+        <span>Service: <code>Dockerfile</code>, <code>selfad.yml</code></span>
+        <span>Jury: <code>inject.py</code>, <code>exploit.py</code></span>
+        <span>Optional: <code>checker.py</code>, <code>requirements.txt</code></span>
+        <span>Target: <code>SELFAD_TARGET</code> and argv[1]</span>
+        <span>Full author and jury instructions are added as <code>README.md</code>.</span>
+      </div>
+
+      <div class="service-form-actions">
+        <button type="submit" data-service-submit>{% if service_edit_id %}Save changes{% else %}Create repositories{% endif %}</button>
+      </div>
+    </form>
+  </section>

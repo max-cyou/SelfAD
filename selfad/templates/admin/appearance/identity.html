@@ -1,0 +1,34 @@
+<section class="appearance-identity" aria-labelledby="site-identity-title">
+      <div class="template-section-heading">
+        <div>
+          <h3 id="site-identity-title">Site identity</h3>
+          <p>Used in the browser title and shared header.</p>
+        </div>
+      </div>
+      <div class="template-identity-fields">
+        <div class="field{% if errors.get('site_name') %} field--error{% endif %}">
+          <label for="site-name">Platform title</label>
+          <input id="site-name" name="site_name" type="text" value="{{ form_values.site_name }}" maxlength="120" required>
+          {% if errors.get('site_name') %}<small>{{ errors.site_name }}</small>{% endif %}
+        </div>
+        <div class="compact-options">
+          <label class="compact-check">
+            <input name="change_title" type="checkbox"{% if form_values.change_title %} checked{% endif %}>
+            <span>Change title</span>
+          </label>
+          <label class="compact-check">
+            <input name="remove_standard_logo" type="checkbox"{% if form_values.remove_standard_logo %} checked{% endif %}>
+            <span>Remove standard logo</span>
+          </label>
+        </div>
+      </div>
+      <div class="identity-actions">
+        <button class="save-appearance" type="submit" data-appearance-save="identity">Save identity</button>
+        <button
+          class="reset-appearance"
+          type="submit"
+          formaction="{{ url_for('reset_appearance') }}"
+          formnovalidate
+        >Reset customization</button>
+      </div>
+    </section>

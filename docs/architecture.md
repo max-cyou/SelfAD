@@ -56,6 +56,22 @@ The worker calls the Gitea and runtime APIs. `selfad/scoring.py` remains
 responsible for score formulas and attempt history; it does not execute code.
 The module extraction does not change database schema, queue policy or scoring.
 
+## Administration templates
+
+`selfad/templates/admin.html` is the page shell. Section templates and their
+form fragments live under `selfad/templates/admin/`:
+
+- `general/` contains registration, contest state, scoring, penalties, attack
+  dependencies and Git access. Optional settings use native `details` blocks;
+  collapsed fields remain enabled and are submitted by the shared form.
+- `services/` separates the repository list from the create/edit form.
+- `users/` contains the account editor and Gitea administrator credentials.
+- `appearance/` separates identity, palette and home-page templates.
+- `sidebar.html` owns section navigation.
+
+Server validation opens the affected settings modules. `static/admin.js`
+updates summaries and opens parent blocks for browser validation errors.
+
 ## Verification
 
 Run from the repository root after installing `requirements-dev.txt`:
