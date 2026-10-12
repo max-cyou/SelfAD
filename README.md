@@ -1067,6 +1067,9 @@ large Docker contexts can be much slower than the reference service.
 Contributions should preserve the security boundaries, keep deployment
 defaults conservative and add tests for behavioral or infrastructure changes.
 
+See the [module map](docs/architecture.md) for the Gitea integration, Docker
+runtime and repository workers, including where to place changes and test mocks.
+
 ---
 
 <div align="center">

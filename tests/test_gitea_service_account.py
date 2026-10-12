@@ -19,7 +19,7 @@ class GiteaServiceAccountTests(unittest.TestCase):
             verify_tls=False,
         )
 
-    @patch("selfad.gitea._request")
+    @patch("selfad.gitea_api.repositories._request")
     def test_service_repositories_remain_owned_by_root(self, request):
         request.return_value = {
             "id": 7,
@@ -38,7 +38,7 @@ class GiteaServiceAccountTests(unittest.TestCase):
         self.assertEqual(repository.path, "root/example")
         self.assertEqual(request.call_args.args[2], "/admin/users/root/repos")
 
-    @patch("selfad.gitea._request")
+    @patch("selfad.gitea_api.users._request")
     def test_organizer_ssh_key_is_attached_to_root(self, request):
         request.side_effect = [[], {"id": 9}]
 

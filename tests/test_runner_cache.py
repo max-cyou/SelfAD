@@ -32,7 +32,7 @@ class RunnerCacheTests(unittest.TestCase):
             scripts.mkdir()
             (scripts / "exploit.py").write_text("print('ok')\n")
             context = root / "context"
-            with patch("selfad.runner._docker") as docker:
+            with patch("selfad.runtime.requirements._docker") as docker:
                 docker.return_value.returncode = 0
                 _prepare_runtime_image(
                     requirements,

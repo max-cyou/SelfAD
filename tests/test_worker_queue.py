@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import selfad.worker as worker
+import selfad.workers.queue as queue
 from selfad.database import Base
 from selfad.models import (
     ParticipantService,
@@ -51,7 +52,7 @@ class WorkerQueueTests(unittest.TestCase):
                 )
                 session.commit()
 
-            with patch.object(worker, "SessionLocal", local_session):
+            with patch.object(queue, "SessionLocal", local_session):
                 with ThreadPoolExecutor(max_workers=2) as executor:
                     claims = list(executor.map(lambda _: worker._claim_repository_batch(), range(2)))
                 claimed = [batch for batch in claims if batch is not None]
@@ -110,7 +111,7 @@ class WorkerQueueTests(unittest.TestCase):
                 )
                 session.commit()
 
-            with patch.object(worker, "SessionLocal", local_session):
+            with patch.object(queue, "SessionLocal", local_session):
                 batch = worker._claim_repository_batch()
 
             self.assertIsNotNone(batch)
@@ -211,7 +212,7 @@ class WorkerQueueTests(unittest.TestCase):
                 )
                 session.commit()
 
-            with patch.object(worker, "SessionLocal", local_session):
+            with patch.object(queue, "SessionLocal", local_session):
                 self.assertIsNone(worker._claim_repository_batch())
 
             with local_session() as session:

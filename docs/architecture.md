@@ -1,0 +1,73 @@
+# Module map
+
+SelfAD runs one control-plane process with several repository worker threads.
+The queue and scores live in the database; Gitea stores the source repositories
+and Docker executes checks.
+
+## Gitea integration
+
+`selfad/gitea.py` preserves the existing import API. Implementations live in
+`selfad/gitea_api/`:
+
+| Module | Responsibility |
+| --- | --- |
+| `types.py` | Repository/file/account records and error types |
+| `client.py` | Authenticated JSON requests and repository response parsing |
+| `repositories.py` | Repository lifecycle, branch commits, collaborators and webhooks |
+| `files.py` | File reads, trees, atomic changes and archive downloads |
+| `users.py` | Accounts, authentication and SSH keys |
+| `provisioning.py` | Create and initialize the organizer's service and jury repositories |
+
+These modules import each other directly. They do not import the public facade,
+which avoids circular imports.
+
+## Docker runtime
+
+`selfad/runner.py` preserves the runtime API. Implementations live in
+`selfad/runtime/`:
+
+| Module | Responsibility |
+| --- | --- |
+| `types.py` | Result records, errors, limits and the shared cache build lock |
+| `process.py` | Bounded subprocess execution, timeouts and termination |
+| `docker.py` | Docker CLI environment, labels, availability and cleanup |
+| `archive.py` | Safe repository archive extraction |
+| `requirements.py` | Dependency validation and Python runtime image preparation |
+| `cache.py` | Canonical service image names and pruning |
+| `sandbox.py` | Restricted script execution and service health probes |
+| `output.py` | Flag parsing, stdout noise and log formatting |
+| `check.py` | Build, start, check functionality, inject flags and execute exploits |
+
+Runtime isolation and resource limits belong in `sandbox.py` and `check.py`.
+The archive and process limits are enforced by their respective modules.
+
+## Repository workers
+
+`selfad/worker.py` owns the worker loop and canonical service validation/runtime
+checks. Supporting modules live in `selfad/workers/`:
+
+| Module | Responsibility |
+| --- | --- |
+| `types.py` | Immutable batch identifiers, generations and commit SHAs |
+| `queue.py` | Claim/recover events, detect superseded batches and finish events |
+| `participant.py` | Attack/defense checks and submission score persistence |
+
+The worker calls the Gitea and runtime APIs. `selfad/scoring.py` remains
+responsible for score formulas and attempt history; it does not execute code.
+The module extraction does not change database schema, queue policy or scoring.
+
+## Verification
+
+Run from the repository root after installing `requirements-dev.txt`:
+
+```bash
+python -m unittest discover -s tests -v
+ruff check selfad tests migrations main.py
+mypy
+```
+
+When mocking a dependency, patch the module that uses it. For example, file API
+tests patch `selfad.gitea_api.files._request`, sandbox tests patch
+`selfad.runtime.sandbox._docker`, and queue tests patch
+`selfad.workers.queue.SessionLocal`. Patching a facade export does not replace
+the dependency inside its implementation module.

@@ -20,7 +20,7 @@ https://docs.github.com/en/code-security/security-advisories/guidance-on-reporti
 
 - The SelfAD control plane (web panel, queue, Gitea integration).
 - The runner-side isolation: sandbox settings, archive extraction, resource
-  limits, network policies described in `selfad/runner.py`.
+  limits and network policies implemented under `selfad/runtime/`.
 - The deployment configuration shipped in this repository: Dockerfile,
   Compose files, hardening scripts.
 

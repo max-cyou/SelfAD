@@ -71,7 +71,7 @@ class RunnerSecurityTests(unittest.TestCase):
             self.assertFalse(settings.internal_runner_enabled)
             self.assertEqual(runner_mode(), "external")
 
-    @patch("selfad.runner._docker")
+    @patch("selfad.runtime.sandbox._docker")
     def test_script_runner_is_non_root_and_restricted(self, docker):
         docker.return_value = CommandResult(0, "")
         _run_jury_script(
@@ -96,7 +96,7 @@ class RunnerSecurityTests(unittest.TestCase):
             "selfad-test-network",
         )
 
-    @patch("selfad.runner._docker")
+    @patch("selfad.runtime.sandbox._docker")
     def test_health_probe_runs_inside_the_isolated_network(self, docker):
         docker.return_value = CommandResult(0, "")
         _wait_for_healthcheck("selfad-test-network", 8080, "/health")
@@ -111,8 +111,8 @@ class RunnerSecurityTests(unittest.TestCase):
         self.assertEqual(arguments[arguments.index("--user") + 1], RUNNER_USER)
         self.assertIn("http://target:8080/health", arguments)
 
-    @patch("selfad.runner._docker_quiet")
-    @patch("selfad.runner._docker")
+    @patch("selfad.runtime.docker._docker_quiet")
+    @patch("selfad.runtime.docker._docker")
     def test_cleanup_only_targets_labeled_resources(self, docker, docker_quiet):
         docker.side_effect = [
             CommandResult(0, "25.0"),

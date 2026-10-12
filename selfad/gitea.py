@@ -1,1057 +1,122 @@
-import base64
-import binascii
-import json
-import ssl
-from dataclasses import dataclass
-from urllib.error import HTTPError, URLError
-from urllib.parse import quote
-from urllib.request import Request, urlopen
-
-from selfad.repository_readmes import jury_readme, organizer_readme
-from selfad.settings import GiteaSettings
-
-GITEA_REPOSITORY_OWNER = "root"
-
-
-class GiteaError(Exception):
-    pass
-
-
-class GiteaRepositoryNotFound(GiteaError):
-    pass
-
-
-class GiteaUnavailable(GiteaError):
-    pass
-
-
-class GiteaConflict(GiteaError):
-    pass
-
-
-class GiteaFileTooLarge(GiteaError):
-    pass
-
-
-class _GiteaRequestError(Exception):
-    def __init__(self, status_code: int):
-        self.status_code = status_code
-
-
-@dataclass(frozen=True)
-class GiteaRepository:
-    id: int
-    path: str
-    default_branch: str | None
-    empty: bool
-
-
-@dataclass(frozen=True)
-class GiteaUser:
-    id: int
-    username: str
-
-
-@dataclass(frozen=True)
-class ProvisionedService:
-    service_repository: GiteaRepository
-    jury_repository: GiteaRepository
-    ssh_key_id: int
-
-
-@dataclass(frozen=True)
-class GiteaRepositoryFile:
-    path: str
-    sha: str
-    size: int
-
-
-@dataclass(frozen=True)
-class GiteaFileContent:
-    path: str
-    sha: str
-    content: bytes
-
-
-@dataclass(frozen=True)
-class GiteaFileChange:
-    operation: str
-    path: str
-    content: bytes | None = None
-    sha: str | None = None
-
-
-def _request(
-    settings: GiteaSettings,
-    method: str,
-    path: str,
-    payload: dict[str, object] | None = None,
-):
-    if not settings.private_token:
-        raise GiteaUnavailable("Gitea API token is not configured.")
-
-    data = json.dumps(payload).encode() if payload is not None else None
-    request = Request(
-        f"{settings.internal_url}/api/v1{path}",
-        data=data,
-        method=method,
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Authorization": f"token {settings.private_token}",
-        },
-    )
-    context = None
-    if not settings.verify_tls:
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-
-    try:
-        with urlopen(request, timeout=8, context=context) as response:
-            body = response.read()
-            if not body:
-                return None
-            return json.loads(body)
-    except HTTPError as error:
-        raise _GiteaRequestError(error.code) from error
-    except (URLError, TimeoutError, json.JSONDecodeError) as error:
-        raise GiteaUnavailable("Gitea API is unavailable.") from error
-
-
-def _parse_repository(payload) -> GiteaRepository:
-    repository_id = payload.get("id") if isinstance(payload, dict) else None
-    path = payload.get("full_name") if isinstance(payload, dict) else None
-    default_branch = payload.get("default_branch") if isinstance(payload, dict) else None
-    empty = payload.get("empty") if isinstance(payload, dict) else None
-    if (
-        not isinstance(repository_id, int)
-        or isinstance(repository_id, bool)
-        or not isinstance(path, str)
-        or not isinstance(empty, bool)
-    ):
-        raise GiteaUnavailable("Gitea returned an invalid repository response.")
-    if default_branch is not None and not isinstance(default_branch, str):
-        raise GiteaUnavailable("Gitea returned an invalid repository response.")
-    return GiteaRepository(repository_id, path, default_branch, empty)
-
-
-def get_repository(
-    settings: GiteaSettings,
-    repository_path: str,
-) -> GiteaRepository:
-    try:
-        owner, name = repository_path.split("/", 1)
-    except ValueError as error:
-        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
-
-    path = f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
-    try:
-        payload = _request(settings, "GET", path)
-    except _GiteaRequestError as error:
-        if error.status_code == 404:
-            raise GiteaRepositoryNotFound("Gitea repository was not found.") from error
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea rejected the configured token.") from error
-        raise GiteaUnavailable("Gitea API returned an error.") from error
-    return _parse_repository(payload)
-
-
-def get_branch_commit(
-    settings: GiteaSettings,
-    repository_path: str,
-    *,
-    branch: str | None = None,
-) -> str:
-    try:
-        owner, name = repository_path.split("/", 1)
-    except ValueError as error:
-        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
-
-    repository = get_repository(settings, repository_path)
-    branch_name = branch or repository.default_branch
-    if not branch_name:
-        raise GiteaRepositoryNotFound("Gitea repository has no default branch.")
-
-    path = (
-        f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
-        f"/branches/{quote(branch_name, safe='')}"
-    )
-    try:
-        payload = _request(settings, "GET", path)
-    except _GiteaRequestError as error:
-        if error.status_code == 404:
-            raise GiteaRepositoryNotFound("Gitea branch was not found.") from error
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea rejected the configured token.") from error
-        raise GiteaUnavailable("Gitea could not inspect the branch.") from error
-
-    commit = payload.get("commit") if isinstance(payload, dict) else None
-    commit_id = commit.get("id") if isinstance(commit, dict) else None
-    if not isinstance(commit_id, str) or not commit_id:
-        raise GiteaUnavailable("Gitea returned an invalid branch response.")
-    return commit_id
-
-
-def get_repository_file(
-    settings: GiteaSettings,
-    repository_path: str,
-    file_path: str,
-    *,
-    ref: str,
-    max_bytes: int = 262_144,
-) -> bytes | None:
-    file = get_repository_file_content(
-        settings,
-        repository_path,
-        file_path,
-        ref=ref,
-        max_bytes=max_bytes,
-    )
-    return file.content if file else None
-
-
-def get_repository_file_content(
-    settings: GiteaSettings,
-    repository_path: str,
-    file_path: str,
-    *,
-    ref: str,
-    max_bytes: int = 262_144,
-) -> GiteaFileContent | None:
-    try:
-        owner, name = repository_path.split("/", 1)
-    except ValueError:
-        return None
-
-    encoded_file_path = "/".join(
-        quote(part, safe="") for part in file_path.split("/")
-    )
-    path = (
-        f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
-        f"/contents/{encoded_file_path}?ref={quote(ref, safe='')}"
-    )
-    try:
-        payload = _request(settings, "GET", path)
-    except _GiteaRequestError as error:
-        if error.status_code == 404:
-            return None
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea rejected the configured token.") from error
-        raise GiteaUnavailable("Gitea could not inspect the repository.") from error
-
-    if not isinstance(payload, dict) or payload.get("type") != "file":
-        return None
-
-    size = payload.get("size")
-    sha = payload.get("sha")
-    content = payload.get("content")
-    encoding = payload.get("encoding")
-    if (
-        not isinstance(size, int)
-        or isinstance(size, bool)
-        or not isinstance(sha, str)
-        or not sha
-        or not isinstance(content, str)
-        or encoding != "base64"
-    ):
-        raise GiteaUnavailable("Gitea returned an invalid file response.")
-    if size > max_bytes:
-        raise GiteaFileTooLarge(f"{file_path} exceeds the {max_bytes} byte limit.")
-
-    try:
-        decoded = base64.b64decode("".join(content.split()), validate=True)
-    except (binascii.Error, ValueError) as error:
-        raise GiteaUnavailable("Gitea returned invalid file content.") from error
-    if len(decoded) > max_bytes:
-        raise GiteaFileTooLarge(f"{file_path} exceeds the {max_bytes} byte limit.")
-    return GiteaFileContent(path=file_path, sha=sha, content=decoded)
-
-
-def download_repository_archive(
-    settings: GiteaSettings,
-    repository_path: str,
-    *,
-    ref: str,
-    max_bytes: int = 32 * 1024 * 1024,
-) -> bytes:
-    if not settings.private_token:
-        raise GiteaUnavailable("Gitea API token is not configured.")
-    try:
-        owner, name = repository_path.split("/", 1)
-    except ValueError as error:
-        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
-
-    archive_name = quote(f"{ref}.tar.gz", safe=".")
-    path = (
-        f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
-        f"/archive/{archive_name}"
-    )
-    request = Request(
-        f"{settings.internal_url}/api/v1{path}",
-        method="GET",
-        headers={
-            "Accept": "application/octet-stream",
-            "Authorization": f"token {settings.private_token}",
-        },
-    )
-    context = None
-    if not settings.verify_tls:
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-
-    try:
-        with urlopen(request, timeout=30, context=context) as response:
-            content_length = response.headers.get("Content-Length")
-            if content_length and int(content_length) > max_bytes:
-                raise GiteaFileTooLarge(
-                    f"Repository archive exceeds the {max_bytes} byte limit."
-                )
-            archive = response.read(max_bytes + 1)
-    except HTTPError as error:
-        if error.code == 404:
-            raise GiteaRepositoryNotFound(
-                "Gitea repository archive was not found."
-            ) from error
-        if error.code in {401, 403}:
-            raise GiteaUnavailable("Gitea rejected the configured token.") from error
-        raise GiteaUnavailable("Gitea could not create the repository archive.") from error
-    except (URLError, TimeoutError, ValueError) as error:
-        raise GiteaUnavailable("Gitea repository archive is unavailable.") from error
-
-    if len(archive) > max_bytes:
-        raise GiteaFileTooLarge(
-            f"Repository archive exceeds the {max_bytes} byte limit."
-        )
-    return archive
-
-
-def repository_file_exists(
-    settings: GiteaSettings,
-    repository_path: str,
-    file_path: str,
-    *,
-    ref: str,
-) -> bool:
-    return get_repository_file(
-        settings,
-        repository_path,
-        file_path,
-        ref=ref,
-        max_bytes=1_048_576,
-    ) is not None
-
-
-def create_repository(
-    settings: GiteaSettings,
-    *,
-    path: str,
-    description: str,
-    default_branch: str,
-) -> GiteaRepository:
-    payload: dict[str, object] = {
-        "name": path,
-        "description": description,
-        "private": True,
-        "auto_init": False,
-        "default_branch": default_branch,
-    }
-    try:
-        response = _request(
-            settings,
-            "POST",
-            f"/admin/users/{GITEA_REPOSITORY_OWNER}/repos",
-            payload,
-        )
-    except _GiteaRequestError as error:
-        if error.status_code in {409, 422}:
-            raise GiteaConflict("A Gitea repository with this path already exists.") from error
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea cannot create repositories with this token.") from error
-        raise GiteaUnavailable("Gitea could not create the repository.") from error
-    return _parse_repository(response)
-
-
-def create_gitea_user(
-    settings: GiteaSettings,
-    *,
-    username: str,
-    email: str,
-    password: str,
-) -> GiteaUser:
-    try:
-        response = _request(
-            settings,
-            "POST",
-            "/admin/users",
-            {
-                "username": username,
-                "email": email,
-                "password": password,
-                "must_change_password": False,
-                "restricted": False,
-                "send_notify": False,
-                "visibility": "private",
-            },
-        )
-    except _GiteaRequestError as error:
-        if error.status_code in {409, 422}:
-            raise GiteaConflict("A Gitea user with this name already exists.") from error
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea cannot create participants.") from error
-        raise GiteaUnavailable("Gitea could not create the participant.") from error
-    user_id = response.get("id") if isinstance(response, dict) else None
-    returned_username = response.get("login") if isinstance(response, dict) else None
-    if not isinstance(user_id, int) or not isinstance(returned_username, str):
-        raise GiteaUnavailable("Gitea returned an invalid user response.")
-    return GiteaUser(user_id, returned_username)
-
-
-def gitea_username_exists(settings: GiteaSettings, *, username: str) -> bool:
-    try:
-        _request(
-            settings,
-            "GET",
-            f"/users/{quote(username, safe='')}",
-        )
-    except _GiteaRequestError as error:
-        if error.status_code == 404:
-            return False
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea rejected the configured token.") from error
-        raise GiteaUnavailable("Gitea could not check the username.") from error
-    return True
-
-
-def get_authenticated_user(settings: GiteaSettings) -> GiteaUser:
-    try:
-        response = _request(settings, "GET", "/user")
-    except _GiteaRequestError as error:
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea rejected the configured token.") from error
-        raise GiteaUnavailable("Gitea could not inspect its administrator.") from error
-
-    user_id = response.get("id") if isinstance(response, dict) else None
-    username = response.get("login") if isinstance(response, dict) else None
-    if not isinstance(user_id, int) or not isinstance(username, str):
-        raise GiteaUnavailable("Gitea returned an invalid user response.")
-    return GiteaUser(user_id, username)
-
-
-def authenticate_gitea_user(
-    settings: GiteaSettings,
-    *,
-    username: str,
-    password: str,
-) -> GiteaUser | None:
-    credentials = base64.b64encode(
-        f"{username}:{password}".encode("utf-8")
-    ).decode("ascii")
-    request = Request(
-        f"{settings.internal_url}/api/v1/user",
-        method="GET",
-        headers={
-            "Accept": "application/json",
-            "Authorization": f"Basic {credentials}",
-        },
-    )
-    context = None
-    if not settings.verify_tls:
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-
-    try:
-        with urlopen(request, timeout=8, context=context) as response:
-            payload = json.loads(response.read())
-    except HTTPError as error:
-        if error.code in {401, 403}:
-            return None
-        raise GiteaUnavailable("Gitea authentication is unavailable.") from error
-    except (URLError, TimeoutError, json.JSONDecodeError) as error:
-        raise GiteaUnavailable("Gitea authentication is unavailable.") from error
-
-    user_id = payload.get("id") if isinstance(payload, dict) else None
-    returned_username = payload.get("login") if isinstance(payload, dict) else None
-    if not isinstance(user_id, int) or not isinstance(returned_username, str):
-        raise GiteaUnavailable("Gitea returned an invalid user response.")
-    return GiteaUser(user_id, returned_username)
-
-
-def update_gitea_user(
-    settings: GiteaSettings,
-    *,
-    username: str,
-    email: str,
-    password: str | None = None,
-) -> None:
-    payload: dict[str, object] = {
-        "source_id": 0,
-        "email": email,
-        "login_name": username,
-    }
-    if password:
-        payload["password"] = password
-        payload["must_change_password"] = False
-    try:
-        _request(
-            settings,
-            "PATCH",
-            f"/admin/users/{quote(username, safe='')}",
-            payload,
-        )
-    except _GiteaRequestError as error:
-        if error.status_code in {409, 422}:
-            raise GiteaConflict("Gitea rejected these user details.") from error
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea cannot update this user.") from error
-        raise GiteaUnavailable("Gitea could not update this user.") from error
-
-
-def delete_gitea_user(settings: GiteaSettings, *, username: str) -> None:
-    try:
-        _request(
-            settings,
-            "DELETE",
-            f"/admin/users/{quote(username, safe='')}?purge=true",
-        )
-    except _GiteaRequestError as error:
-        if error.status_code == 404:
-            return
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea cannot delete this user.") from error
-        raise GiteaUnavailable("Gitea could not delete this user.") from error
-
-
-def add_repository_collaborator(
-    settings: GiteaSettings,
-    repository_path: str,
-    *,
-    username: str,
-    permission: str,
-) -> None:
-    if permission not in {"read", "write"}:
-        raise ValueError("Unsupported Gitea collaborator permission.")
-    try:
-        owner, name = repository_path.split("/", 1)
-    except ValueError as error:
-        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
-    path = (
-        f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
-        f"/collaborators/{quote(username, safe='')}"
-    )
-    try:
-        _request(settings, "PUT", path, {"permission": permission})
-    except _GiteaRequestError as error:
-        if error.status_code == 404:
-            raise GiteaRepositoryNotFound("Gitea repository or user was not found.") from error
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea cannot grant repository access.") from error
-        raise GiteaUnavailable("Gitea could not grant repository access.") from error
-
-
-def remove_repository_collaborator(
-    settings: GiteaSettings,
-    repository_path: str,
-    *,
-    username: str,
-) -> None:
-    try:
-        owner, name = repository_path.split("/", 1)
-    except ValueError as error:
-        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
-    path = (
-        f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
-        f"/collaborators/{quote(username, safe='')}"
-    )
-    try:
-        _request(settings, "DELETE", path)
-    except _GiteaRequestError as error:
-        if error.status_code == 404:
-            return
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea cannot revoke repository access.") from error
-        raise GiteaUnavailable("Gitea could not revoke repository access.") from error
-
-
-def add_user_ssh_key(
-    settings: GiteaSettings,
-    *,
-    username: str,
-    public_key: str,
-) -> int:
-    try:
-        response = _request(
-            settings,
-            "POST",
-            f"/admin/users/{quote(username, safe='')}/keys",
-            {"title": "SelfAD participant", "key": public_key, "read_only": False},
-        )
-    except _GiteaRequestError as error:
-        if error.status_code in {409, 422}:
-            raise GiteaConflict("Gitea rejected this SSH public key.") from error
-        raise GiteaUnavailable("Gitea could not add the participant SSH key.") from error
-    key_id = response.get("id") if isinstance(response, dict) else None
-    if not isinstance(key_id, int):
-        raise GiteaUnavailable("Gitea returned an invalid SSH key response.")
-    return key_id
-
-
-def delete_user_ssh_key(
-    settings: GiteaSettings,
-    *,
-    username: str,
-    key_id: int,
-) -> None:
-    try:
-        _request(
-            settings,
-            "DELETE",
-            f"/admin/users/{quote(username, safe='')}/keys/{key_id}",
-        )
-    except _GiteaRequestError as error:
-        if error.status_code == 404:
-            return
-        raise GiteaUnavailable(
-            "Gitea could not remove the previous SSH key."
-        ) from error
-
-
-def create_repository_file(
-    settings: GiteaSettings,
-    repository_path: str,
-    file_path: str,
-    *,
-    content: bytes,
-    branch: str,
-    message: str,
-) -> None:
-    try:
-        owner, name = repository_path.split("/", 1)
-    except ValueError as error:
-        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
-    encoded_file_path = "/".join(quote(part, safe="") for part in file_path.split("/"))
-    path = (
-        f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
-        f"/contents/{encoded_file_path}"
-    )
-    try:
-        _request(
-            settings,
-            "POST",
-            path,
-            {
-                "branch": branch,
-                "message": message,
-                "content": base64.b64encode(content).decode("ascii"),
-            },
-        )
-    except _GiteaRequestError as error:
-        if error.status_code in {409, 422}:
-            raise GiteaConflict("Gitea rejected a repository seed file.") from error
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea cannot seed the repository.") from error
-        raise GiteaUnavailable("Gitea could not seed the repository.") from error
-
-
-def replace_repository_file(
-    settings: GiteaSettings,
-    repository_path: str,
-    file_path: str,
-    *,
-    content: bytes,
-    branch: str,
-    message: str,
-) -> None:
-    try:
-        owner, name = repository_path.split("/", 1)
-    except ValueError as error:
-        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
-    encoded_file_path = "/".join(
-        quote(part, safe="") for part in file_path.split("/")
-    )
-    path = (
-        f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
-        f"/contents/{encoded_file_path}"
-    )
-    try:
-        existing = _request(
-            settings,
-            "GET",
-            f"{path}?ref={quote(branch, safe='')}",
-        )
-    except _GiteaRequestError as error:
-        if error.status_code != 404:
-            raise GiteaUnavailable("Gitea could not inspect the repository file.") from error
-        existing = None
-
-    payload: dict[str, object] = {
-        "branch": branch,
-        "message": message,
-        "content": base64.b64encode(content).decode("ascii"),
-    }
-    method = "POST"
-    if isinstance(existing, dict):
-        sha = existing.get("sha")
-        if not isinstance(sha, str) or not sha:
-            raise GiteaUnavailable("Gitea returned invalid repository file metadata.")
-        payload["sha"] = sha
-        method = "PUT"
-
-    try:
-        _request(settings, method, path, payload)
-    except _GiteaRequestError as error:
-        if error.status_code in {409, 422}:
-            raise GiteaConflict("Gitea rejected the repository file update.") from error
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea cannot update the repository file.") from error
-        raise GiteaUnavailable("Gitea could not update the repository file.") from error
-
-
-def list_repository_files(
-    settings: GiteaSettings,
-    repository_path: str,
-    *,
-    ref: str,
-) -> list[str]:
-    return [
-        file.path
-        for file in list_repository_file_entries(
-            settings,
-            repository_path,
-            ref=ref,
-        )
-    ]
-
-
-def list_repository_file_entries(
-    settings: GiteaSettings,
-    repository_path: str,
-    *,
-    ref: str,
-) -> list[GiteaRepositoryFile]:
-    try:
-        owner, name = repository_path.split("/", 1)
-    except ValueError as error:
-        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
-    path = (
-        f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
-        f"/git/trees/{quote(ref, safe='')}?recursive=true"
-    )
-    try:
-        response = _request(settings, "GET", path)
-    except _GiteaRequestError as error:
-        if error.status_code == 404:
-            raise GiteaRepositoryNotFound("Gitea repository tree was not found.") from error
-        raise GiteaUnavailable("Gitea could not read the repository tree.") from error
-    tree = response.get("tree") if isinstance(response, dict) else None
-    if not isinstance(tree, list):
-        raise GiteaUnavailable("Gitea returned an invalid repository tree.")
-    files: list[GiteaRepositoryFile] = []
-    for item in tree:
-        path = item.get("path") if isinstance(item, dict) else None
-        item_type = item.get("type") if isinstance(item, dict) else None
-        sha = item.get("sha") if isinstance(item, dict) else None
-        size = item.get("size") if isinstance(item, dict) else None
-        if (
-            isinstance(path, str)
-            and item_type == "blob"
-            and isinstance(sha, str)
-            and sha
-            and isinstance(size, int)
-            and not isinstance(size, bool)
-            and size >= 0
-            and path
-            and not path.startswith("/")
-            and ".." not in path.split("/")
-        ):
-            files.append(GiteaRepositoryFile(path=path, sha=sha, size=size))
-    if len(files) > 2_000:
-        raise GiteaFileTooLarge("Repository contains too many files to provision.")
-    return files
-
-
-def change_repository_files(
-    settings: GiteaSettings,
-    repository_path: str,
-    *,
-    branch: str,
-    message: str,
-    changes: list[GiteaFileChange],
-    author_name: str,
-    author_email: str,
-) -> str:
-    try:
-        owner, name = repository_path.split("/", 1)
-    except ValueError as error:
-        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
-    if not changes:
-        raise ValueError("At least one repository file change is required.")
-
-    files: list[dict[str, object]] = []
-    for change in changes:
-        if change.operation not in {"create", "update", "delete"}:
-            raise ValueError("Unsupported repository file operation.")
-        payload: dict[str, object] = {
-            "operation": change.operation,
-            "path": change.path,
-        }
-        if change.content is not None:
-            payload["content"] = base64.b64encode(change.content).decode("ascii")
-        if change.sha is not None:
-            payload["sha"] = change.sha
-        files.append(payload)
-
-    path = f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}/contents"
-    try:
-        response = _request(
-            settings,
-            "POST",
-            path,
-            {
-                "branch": branch,
-                "message": message,
-                "author": {"name": author_name, "email": author_email},
-                "committer": {"name": author_name, "email": author_email},
-                "files": files,
-            },
-        )
-    except _GiteaRequestError as error:
-        if error.status_code in {409, 422}:
-            raise GiteaConflict("Repository changed while the files were submitted.") from error
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea cannot update the repository.") from error
-        if error.status_code == 404:
-            raise GiteaRepositoryNotFound("Gitea repository was not found.") from error
-        raise GiteaUnavailable("Gitea could not update the repository.") from error
-
-    commit = response.get("commit") if isinstance(response, dict) else None
-    commit_sha = commit.get("sha") if isinstance(commit, dict) else None
-    if not isinstance(commit_sha, str) or not commit_sha:
-        raise GiteaUnavailable("Gitea returned an invalid multi-file commit response.")
-    return commit_sha
-
-
-def delete_repository(settings: GiteaSettings, repository_path: str) -> None:
-    try:
-        owner, name = repository_path.split("/", 1)
-    except ValueError:
-        return
-
-    path = f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
-    try:
-        _request(settings, "DELETE", path)
-    except _GiteaRequestError as error:
-        if error.status_code != 404:
-            raise GiteaUnavailable("Gitea could not remove the repository.") from error
-
-
-def ensure_repository_webhook(
-    settings: GiteaSettings,
-    repository_path: str,
-    *,
-    secret: str,
-    branch_filter: str,
-) -> int:
-    try:
-        owner, name = repository_path.split("/", 1)
-    except ValueError as error:
-        raise GiteaRepositoryNotFound("Gitea repository path is invalid.") from error
-
-    repository_api_path = (
-        f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
-    )
-    try:
-        hooks = _request(settings, "GET", f"{repository_api_path}/hooks?limit=50")
-    except _GiteaRequestError as error:
-        if error.status_code == 404:
-            raise GiteaRepositoryNotFound("Gitea repository was not found.") from error
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea rejected the configured token.") from error
-        raise GiteaUnavailable("Gitea could not inspect repository webhooks.") from error
-
-    if isinstance(hooks, list):
-        for hook in hooks:
-            if not isinstance(hook, dict):
-                continue
-            config = hook.get("config")
-            events = hook.get("events")
-            hook_id = hook.get("id")
-            if (
-                isinstance(config, dict)
-                and config.get("url") == settings.webhook_url
-                and isinstance(events, list)
-                and "push" in events
-                and hook.get("branch_filter") == branch_filter
-                and hook.get("active") is True
-                and isinstance(hook_id, int)
-            ):
-                return hook_id
-
-    payload: dict[str, object] = {
-        "type": "gitea",
-        "active": True,
-        "events": ["push"],
-        "branch_filter": branch_filter,
-        "config": {
-            "url": settings.webhook_url,
-            "content_type": "json",
-            "secret": secret,
-        },
-    }
-    try:
-        response = _request(
-            settings,
-            "POST",
-            f"{repository_api_path}/hooks",
-            payload,
-        )
-    except _GiteaRequestError as error:
-        if error.status_code == 404:
-            raise GiteaRepositoryNotFound("Gitea repository was not found.") from error
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea cannot configure repository webhooks.") from error
-        raise GiteaUnavailable("Gitea could not create the repository webhook.") from error
-
-    hook_id = response.get("id") if isinstance(response, dict) else None
-    if not isinstance(hook_id, int):
-        raise GiteaUnavailable("Gitea returned an invalid webhook response.")
-    return hook_id
-
-
-def ensure_ssh_key(
-    settings: GiteaSettings,
-    public_key: str,
-    *,
-    username: str = GITEA_REPOSITORY_OWNER,
-) -> int:
-    try:
-        keys = _request(
-            settings,
-            "GET",
-            f"/users/{quote(username, safe='')}/keys?limit=100",
-        )
-    except _GiteaRequestError as error:
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea rejected the configured token.") from error
-        raise GiteaUnavailable("Gitea could not read SSH keys.") from error
-
-    key_identity = " ".join(public_key.split()[:2])
-    if isinstance(keys, list):
-        for key in keys:
-            existing_key = key.get("key") if isinstance(key, dict) else None
-            existing_id = key.get("id") if isinstance(key, dict) else None
-            if (
-                isinstance(existing_key, str)
-                and " ".join(existing_key.split()[:2]) == key_identity
-                and isinstance(existing_id, int)
-            ):
-                return existing_id
-
-    try:
-        response = _request(
-            settings,
-            "POST",
-            f"/admin/users/{quote(username, safe='')}/keys",
-            {
-                "title": "SelfAD administrator",
-                "key": public_key,
-                "read_only": False,
-            },
-        )
-    except _GiteaRequestError as error:
-        if error.status_code in {409, 422}:
-            raise GiteaConflict("Gitea rejected this SSH public key.") from error
-        if error.status_code in {401, 403}:
-            raise GiteaUnavailable("Gitea cannot add SSH keys with this token.") from error
-        raise GiteaUnavailable("Gitea could not add the SSH key.") from error
-
-    key_id = response.get("id") if isinstance(response, dict) else None
-    if not isinstance(key_id, int):
-        raise GiteaUnavailable("Gitea returned an invalid SSH key response.")
-    return key_id
-
-
-def provision_service(
-    settings: GiteaSettings,
-    *,
-    name: str,
-    slug: str,
-    description: str,
-    default_branch: str,
-    ssh_public_key: str,
-    organizer_username: str,
-    webhook_secret: str,
-) -> ProvisionedService:
-    ssh_key_id = ensure_ssh_key(
-        settings,
-        ssh_public_key,
-        username=organizer_username,
-    )
-    service_repository = create_repository(
-        settings,
-        path=slug,
-        description=description,
-        default_branch=default_branch,
-    )
-    jury_repository: GiteaRepository | None = None
-    try:
-        create_repository_file(
-            settings,
-            service_repository.path,
-            "README.md",
-            content=organizer_readme(name, default_branch),
-            branch=default_branch,
-            message="Add service author instructions",
-        )
-        jury_repository = create_repository(
-            settings,
-            path=f"{slug}-jury",
-            description=f"Private SelfAD jury files for {name}.",
-            default_branch=default_branch,
-        )
-        if organizer_username != GITEA_REPOSITORY_OWNER:
-            for repository_path in (
-                service_repository.path,
-                jury_repository.path,
-            ):
-                add_repository_collaborator(
-                    settings,
-                    repository_path,
-                    username=organizer_username,
-                    permission="write",
-                )
-        create_repository_file(
-            settings,
-            jury_repository.path,
-            "README.md",
-            content=jury_readme(name, default_branch),
-            branch=default_branch,
-            message="Add jury instructions",
-        )
-        ensure_repository_webhook(
-            settings,
-            service_repository.path,
-            secret=webhook_secret,
-            branch_filter=default_branch,
-        )
-        ensure_repository_webhook(
-            settings,
-            jury_repository.path,
-            secret=webhook_secret,
-            branch_filter=default_branch,
-        )
-    except GiteaError:
-        if jury_repository is not None:
-            try:
-                delete_repository(settings, jury_repository.path)
-            except GiteaError:
-                pass
-        try:
-            delete_repository(settings, service_repository.path)
-        except GiteaError:
-            pass
-        raise
-    assert jury_repository is not None
-    return ProvisionedService(service_repository, jury_repository, ssh_key_id)
+"""Public API; implementation is organized by responsibility."""
+
+from selfad.gitea_api.client import (
+    _parse_repository as _parse_repository,
+)
+from selfad.gitea_api.client import (
+    _request as _request,
+)
+from selfad.gitea_api.files import (
+    change_repository_files as change_repository_files,
+)
+from selfad.gitea_api.files import (
+    create_repository_file as create_repository_file,
+)
+from selfad.gitea_api.files import (
+    download_repository_archive as download_repository_archive,
+)
+from selfad.gitea_api.files import (
+    get_repository_file as get_repository_file,
+)
+from selfad.gitea_api.files import (
+    get_repository_file_content as get_repository_file_content,
+)
+from selfad.gitea_api.files import (
+    list_repository_file_entries as list_repository_file_entries,
+)
+from selfad.gitea_api.files import (
+    list_repository_files as list_repository_files,
+)
+from selfad.gitea_api.files import (
+    replace_repository_file as replace_repository_file,
+)
+from selfad.gitea_api.files import (
+    repository_file_exists as repository_file_exists,
+)
+from selfad.gitea_api.provisioning import (
+    provision_service as provision_service,
+)
+from selfad.gitea_api.repositories import (
+    add_repository_collaborator as add_repository_collaborator,
+)
+from selfad.gitea_api.repositories import (
+    create_repository as create_repository,
+)
+from selfad.gitea_api.repositories import (
+    delete_repository as delete_repository,
+)
+from selfad.gitea_api.repositories import (
+    ensure_repository_webhook as ensure_repository_webhook,
+)
+from selfad.gitea_api.repositories import (
+    get_branch_commit as get_branch_commit,
+)
+from selfad.gitea_api.repositories import (
+    get_repository as get_repository,
+)
+from selfad.gitea_api.repositories import (
+    remove_repository_collaborator as remove_repository_collaborator,
+)
+from selfad.gitea_api.types import (
+    GITEA_REPOSITORY_OWNER as GITEA_REPOSITORY_OWNER,
+)
+from selfad.gitea_api.types import (
+    GiteaConflict as GiteaConflict,
+)
+from selfad.gitea_api.types import (
+    GiteaError as GiteaError,
+)
+from selfad.gitea_api.types import (
+    GiteaFileChange as GiteaFileChange,
+)
+from selfad.gitea_api.types import (
+    GiteaFileContent as GiteaFileContent,
+)
+from selfad.gitea_api.types import (
+    GiteaFileTooLarge as GiteaFileTooLarge,
+)
+from selfad.gitea_api.types import (
+    GiteaRepository as GiteaRepository,
+)
+from selfad.gitea_api.types import (
+    GiteaRepositoryFile as GiteaRepositoryFile,
+)
+from selfad.gitea_api.types import (
+    GiteaRepositoryNotFound as GiteaRepositoryNotFound,
+)
+from selfad.gitea_api.types import (
+    GiteaUnavailable as GiteaUnavailable,
+)
+from selfad.gitea_api.types import (
+    GiteaUser as GiteaUser,
+)
+from selfad.gitea_api.types import (
+    ProvisionedService as ProvisionedService,
+)
+from selfad.gitea_api.users import (
+    add_user_ssh_key as add_user_ssh_key,
+)
+from selfad.gitea_api.users import (
+    authenticate_gitea_user as authenticate_gitea_user,
+)
+from selfad.gitea_api.users import (
+    create_gitea_user as create_gitea_user,
+)
+from selfad.gitea_api.users import (
+    delete_gitea_user as delete_gitea_user,
+)
+from selfad.gitea_api.users import (
+    delete_user_ssh_key as delete_user_ssh_key,
+)
+from selfad.gitea_api.users import (
+    ensure_ssh_key as ensure_ssh_key,
+)
+from selfad.gitea_api.users import (
+    get_authenticated_user as get_authenticated_user,
+)
+from selfad.gitea_api.users import (
+    gitea_username_exists as gitea_username_exists,
+)
+from selfad.gitea_api.users import (
+    update_gitea_user as update_gitea_user,
+)

@@ -11,7 +11,7 @@ def _read(relative: str) -> str:
 class RegistrationErrorHandlingTests(unittest.TestCase):
     def test_registration_prechecks_reserved_gitea_usernames(self):
         participants = _read("selfad/routes/participants.py")
-        gitea = _read("selfad/gitea.py")
+        gitea = _read("selfad/gitea_api/users.py")
         self.assertIn("def gitea_username_exists", gitea)
         self.assertIn("gitea_username_exists", participants)
         self.assertIn(

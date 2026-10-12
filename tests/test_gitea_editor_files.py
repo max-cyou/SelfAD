@@ -22,7 +22,7 @@ def gitea_settings() -> GiteaSettings:
 
 
 class GiteaEditorFileTests(unittest.TestCase):
-    @patch("selfad.gitea._request")
+    @patch("selfad.gitea_api.files._request")
     def test_tree_entries_include_blob_metadata(self, request):
         request.return_value = {
             "tree": [
@@ -42,7 +42,7 @@ class GiteaEditorFileTests(unittest.TestCase):
         self.assertEqual(files[0].sha, "blob-sha")
         self.assertEqual(files[0].size, 42)
 
-    @patch("selfad.gitea._request")
+    @patch("selfad.gitea_api.files._request")
     def test_file_content_includes_sha(self, request):
         request.return_value = {
             "type": "file",
@@ -63,7 +63,7 @@ class GiteaEditorFileTests(unittest.TestCase):
         self.assertEqual(file.sha, "blob-sha")
         self.assertEqual(file.content, b"hello")
 
-    @patch("selfad.gitea._request")
+    @patch("selfad.gitea_api.files._request")
     def test_multiple_changes_are_sent_as_one_commit(self, request):
         request.return_value = {"commit": {"sha": "new-commit-sha"}}
 

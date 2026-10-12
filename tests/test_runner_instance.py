@@ -6,8 +6,8 @@ from selfad.runner import CommandResult, cleanup_managed_runner_resources
 
 
 class RunnerInstanceTests(unittest.TestCase):
-    @patch("selfad.runner._docker_quiet")
-    @patch("selfad.runner._docker")
+    @patch("selfad.runtime.docker._docker_quiet")
+    @patch("selfad.runtime.docker._docker")
     def test_cleanup_is_scoped_to_this_installation(self, docker, _docker_quiet):
         docker.side_effect = [
             CommandResult(0, "25.0"),

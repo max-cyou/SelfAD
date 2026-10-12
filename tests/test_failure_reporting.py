@@ -10,7 +10,7 @@ def _read(relative: str) -> str:
 
 class RunnerFailureReportingTests(unittest.TestCase):
     def test_stubborn_child_processes_become_runner_errors(self):
-        runner = _read("selfad/runner.py")
+        runner = _read("selfad/runtime/process.py")
         self.assertIn("def _terminate_process", runner)
         self.assertIn("except subprocess.TimeoutExpired", runner)
         self.assertIn("ignored the termination signal", runner)
@@ -18,13 +18,13 @@ class RunnerFailureReportingTests(unittest.TestCase):
         self.assertNotIn("process.wait(timeout=5)\n            raise RunnerError", runner)
 
     def test_script_failures_explain_themselves(self):
-        runner = _read("selfad/runner.py")
+        runner = _read("selfad/runtime/check.py")
         self.assertIn('_script_failure_message("Exploit script"', runner)
         self.assertIn('_script_failure_message("Jury injector"', runner)
         self.assertNotIn('"Jury exploit failed."', runner)
 
     def test_defense_failure_message_names_the_outcome(self):
-        worker = _read("selfad/worker.py")
+        worker = _read("selfad/workers/participant.py")
         self.assertIn(
             "Defense check failed: the jury exploit recovered",
             worker,
@@ -38,7 +38,7 @@ class RunnerFailureReportingTests(unittest.TestCase):
 
 class SshKeyRotationTests(unittest.TestCase):
     def test_gitea_client_can_delete_a_previous_key(self):
-        gitea = _read("selfad/gitea.py")
+        gitea = _read("selfad/gitea_api/users.py")
         self.assertIn("def delete_user_ssh_key", gitea)
 
     def test_admin_replace_flow_removes_the_old_key_first(self):

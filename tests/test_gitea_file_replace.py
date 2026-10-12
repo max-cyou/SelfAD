@@ -6,7 +6,7 @@ from selfad.settings import GiteaSettings
 
 
 class GiteaFileReplaceTests(unittest.TestCase):
-    @patch("selfad.gitea._request")
+    @patch("selfad.gitea_api.files._request")
     def test_existing_file_is_replaced_with_its_sha(self, request):
         request.side_effect = [{"sha": "old-file-sha"}, {}]
         settings = GiteaSettings(
