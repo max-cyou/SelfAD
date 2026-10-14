@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v={{ static_version('app.css') }}">
+  </head>
+  <body style="{{ palette_style }}">
+    <div class="page page--participant">
+      {% include "_header.html" %}
+      <main class="participant-main submissions-main">
+        <div class="participant-heading">
+          <h1>Submissions</h1>
+          <p>All participants. Results are tied to the checked commit.</p>
+        </div>
+        <section class="submissions-panel" aria-label="Submission history">
+          <form class="submissions-filters" method="get" action="/submissions">
+            <div class="field"><label for="submission-participant">Participant</label><input id="submission-participant" name="participant" type="search" value="{{ filters.participant }}" maxlength="32" placeholder="Search username"></div>
+            <div class="field"><label for="submission-service">Service</label><select id="submission-service" name="service"><option value="">All services</option>{% for service in services %}<option value="{{ service.id }}"{% if filters.service == service.id|string %} selected{% endif %}>{{ service.name }}</option>{% endfor %}</select></div>
+            <div class="field"><label for="submission-kind">Repository</label><select id="submission-kind" name="kind"><option value="">Attack &amp; defense</option><option value="attack"{% if filters.kind == 'attack' %} selected{% endif %}>Attack</option><option value="defense"{% if filters.kind == 'defense' %} selected{% endif %}>Defense</option></select></div>
+            <div class="field"><label for="submission-status">Status</label><select id="submission-status" name="status"><option value="">All statuses</option>{% for value, label in status_labels.items() %}<option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+            <button type="submit">Filter</button><a href="/submissions">Reset</a>
+          </form>
+          <div class="admin-table-wrap" tabindex="0" role="region" aria-label="Scrollable submission history">
+            <table class="admin-table submissions-table">
+              <thead><tr><th>Recorded (UTC)</th><th>Participant</th><th>Service</th><th>Repository / commit</th><th>Status</th><th>Awarded result</th><th>Details</th></tr></thead>
+              <tbody>
+                {% for row in rows %}
+                  <tr>
+                    <td>{{ row.recorded_at.strftime('%H:%M:%S') }}<small>{{ row.recorded_at.strftime('%d %b %Y') }} · {{ 'received' if row.record_type == 'event' else 'evaluated' }}</small></td>
+                    <td><strong>{{ row.username }}</strong></td><td>{{ row.service_name }}</td>
+                    <td>{{ row.kind|capitalize }}<small><code title="{{ row.commit_sha }}">{{ row.commit_sha[:10] }}</code></small></td>
+                    <td><span class="submission-badge submission-badge--{{ row.status }}">{{ status_labels[row.status] }}</span>{% if row.record_type == 'attempt' %}<small>{% if row.improved %}Raw score improved{% else %}No raw-score improvement{% endif %}</small>{% endif %}</td>
+                    <td>{% if row.record_type == 'attempt' %}<strong>{{ row.awarded_score }} pts</strong><small>{{ row.raw_score }} raw − {{ row.penalty }} penalty</small>{% else %}—<small>Not evaluated</small>{% endif %}</td>
+                    <td><button class="submission-view" type="button" data-submission-toggle aria-expanded="false" aria-controls="submission-{{ row.record_type }}-{{ row.id }}">View</button></td>
+                  </tr>
+                  <tr class="submission-detail-row" id="submission-{{ row.record_type }}-{{ row.id }}" hidden><td colspan="7"><div class="submission-details">
+                      <h3>Result &amp; scoring</h3>
+                      {% if row.record_type == 'attempt' %}
+                        <p>Attempt #{{ row.attempt_number }}. {{ row.matched_flags }} of {{ row.injected_flags }} flags recovered. Functionality: {{ 'passed' if row.functionality_passed else 'not passed' }}.</p>
+                        <p>{% if row.improved %}{{ row.raw_score }} raw − {{ row.penalty }} penalty = {{ row.awarded_score }} pts. The stored best score never decreases.{% else %}No new raw-score best. No points awarded; the stored best score is unchanged.{% endif %}</p>
+                        <p>{{ 'This attempt counts toward unsuccessful-attempt penalties.' if row.penalty_eligible else 'This attempt does not count toward unsuccessful-attempt penalties.' }}</p>
+                      {% else %}<p>{{ 'Waiting for a worker.' if row.status == 'queued' else 'This submission is being checked.' }} Scores are unchanged until evaluation finishes.</p>{% endif %}
+                      <p class="submission-sha">Commit: <code>{{ row.commit_sha }}</code></p>
+                      <h3>Recorded diagnostics</h3><pre>{{ row.message or 'No diagnostic message recorded.' }}</pre>
+                      <small>{{ row.record_type|capitalize }} #{{ row.id }}. Full runtime logs and check durations are not retained.</small>
+                    </div></td>
+                  </tr>
+                {% else %}<tr><td colspan="7" class="table-empty">No submissions match these filters.</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <nav class="admin-pagination" aria-label="Submissions pagination">
+            {% if page > 1 %}<a href="{{ previous_url }}" rel="prev">← Previous</a>{% else %}<span class="admin-pagination__disabled">← Previous</span>{% endif %}
+            <span>{{ total }} records · page {{ page }} of {{ pages }}</span>
+            {% if page < pages %}<a href="{{ next_url }}" rel="next">Next →</a>{% else %}<span class="admin-pagination__disabled">Next →</span>{% endif %}
+          </nav>
+        </section>
+        <p class="submission-retention">Shows up to {{ retention_limit }} latest evaluated attempts per participant/service, plus queued and running pushes. Historical maxima and settings are not retained; awarded results are not score increments.</p>
+      </main>
+      {% include "_footer.html" %}
+    </div>
+    <script src="{{ url_for('static', path='/submissions.js') }}?v={{ static_version('submissions.js') }}" defer></script>
+  </body>
+</html>

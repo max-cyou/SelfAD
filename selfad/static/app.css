@@ -578,6 +578,101 @@ input[type="checkbox"] {
   height: 42px;
 }
 
+.submissions-panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.submissions-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.submissions-filters .field {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.submissions-filters > a {
+  padding: 12px 0;
+  font-size: 13px;
+}
+
+.submissions-table {
+  min-width: 900px;
+}
+
+.submission-badge {
+  display: inline-block;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.submission-badge--passed {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.submission-badge--failed, .submission-badge--error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.submission-badge--running {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.submission-view {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.submission-detail-row td {
+  white-space: normal;
+  background: var(--surface-subtle);
+}
+
+.submission-details {
+  max-width: 900px;
+  padding: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.submission-details h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.submission-details pre, .submission-sha {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.submission-details pre {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.submission-retention {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .users-toolbar {
   display: flex;
   align-items: center;

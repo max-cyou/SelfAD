@@ -30,6 +30,7 @@ from selfad.routes import (
     home,
     participants,
     setup,
+    submissions,
     webhooks,
 )
 from selfad.runner import cleanup_managed_runner_resources
@@ -187,6 +188,7 @@ def create_app() -> FastAPI:
     app.include_router(setup.router)
     app.include_router(authentication.router)
     app.include_router(participants.router)
+    app.include_router(submissions.router)
     app.include_router(editor.page_router)
     app.include_router(editor.router)
     app.include_router(admin.router)

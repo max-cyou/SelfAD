@@ -58,6 +58,12 @@ The module extraction does not change database schema, queue policy or scoring.
 
 ## Administration templates
 
+`selfad/routes/submissions.py` serves the administrator's `/submissions` page.
+`selfad/submissions.py` reads retained evaluated attempts and in-flight pushes
+with SQL filtering and pagination. The page does not rerun checks or change
+scoring. Attempt diagnostics are existing recorded messages, not full runtime
+logs; exact durations are unavailable without an event/attempt linkage.
+
 `selfad/templates/admin.html` is the page shell. Section templates and their
 form fragments live under `selfad/templates/admin/`:
 

@@ -823,6 +823,22 @@ earliest first solution, username. Places are always unique and sequential;
 the tie-breakers determine the order for equal scores. Zero-point users are
 hidden.
 
+### Submission history
+
+Administrators can open **Submissions** in the top navigation (`/submissions`)
+to inspect participant attempts, exact checked commits, raw scores, penalties
+and awarded results. Filter by participant, service, repository kind or status;
+the page is paginated in batches of 20 records.
+
+History includes the last 50 evaluated attempts per participant/service
+(attack and defense combined), plus queued/running pushes on the service's
+default branch. Superseded or rejected pushes that were never evaluated are
+not scored attempts. Recorded timestamps are UTC: receipt time for in-flight
+pushes and evaluation time for completed attempts. Awarded results are not
+score increments, and historical settings/maxima are not retained. Diagnostic
+messages are available to administrators; full runtime logs and exact check
+durations are not stored in this history.
+
 ## Security Model
 
 ### Implemented controls
