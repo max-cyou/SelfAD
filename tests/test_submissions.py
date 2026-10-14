@@ -15,6 +15,7 @@ from selfad.models import (
     RepositoryEvent,
     RepositoryEventStatus,
     Service,
+    ServiceStatus,
     SubmissionAttempt,
     User,
 )
@@ -33,7 +34,9 @@ class SubmissionsTests(unittest.TestCase):
                               password_hash="unused")
             session.add_all([self.admin, self.alice, InstanceConfig(id=1, setup_complete=True),
                              Service(id=1, name="Telemetry", slug="telemetry",
-                                     repository_path="root/telemetry")])
+                                     repository_path="root/telemetry", status=ServiceStatus.ACTIVE),
+                             Service(id=2, name="Unissued secret service", slug="secret",
+                                     repository_path="root/secret")])
             for user in [self.admin, self.alice]:
                 session.add(ParticipantService(
                     id=user.id, user_id=user.id, service_id=1,
@@ -42,12 +45,18 @@ class SubmissionsTests(unittest.TestCase):
                     attack_dockerfile_sha="a" * 40, defense_dockerfile_sha="b" * 40,
                 ))
             session.add_all([
+                ParticipantService(id=3, user_id=1, service_id=2,
+                                   attack_repository_path="admin/secret-attack",
+                                   defense_repository_path="admin/secret-defense",
+                                   attack_dockerfile_sha="a" * 40,
+                                   defense_dockerfile_sha="b" * 40),
                 self.attempt(1, 1, completed=True, improved=True, matched_flags=9,
                              raw_score=450, penalty=5, awarded_score=445),
                 self.attempt(2, 2, kind="defense", completed=False,
                              message="PRIVATE_FLAG <script>alert(1)</script>"),
                 RepositoryEvent(id=1, delivery_id="queued", repository_path="alice/attack",
                                 ref="refs/heads/main", commit_sha="c" * 40,
+                                message="PRIVATE_QUEUE_DIAGNOSTIC",
                                 received_at=self.now + timedelta(minutes=1)),
                 RepositoryEvent(id=2, delivery_id="running", repository_path="admin/defense",
                                 ref="refs/heads/main", commit_sha="d" * 40,
@@ -119,12 +128,66 @@ class SubmissionsTests(unittest.TestCase):
         self.assertEqual(response.context["page"], 2)
         self.assertEqual(len(response.context["rows"]), 7)
 
-    def test_login_and_admin_access_required(self):
+    def test_login_required_and_participants_wait_for_start(self):
         self.current_user.return_value = None
         response = self.client.get("/submissions", follow_redirects=False)
         self.assertEqual(response.headers["location"], "/login")
         self.current_user.return_value = self.alice
-        self.assertEqual(self.client.get("/submissions").status_code, 403)
+        response = self.client.get("/submissions", follow_redirects=False)
+        self.assertEqual(response.headers["location"], "/")
+
+    def start_contest(self, *, ended=False):
+        with Session(self.engine) as session:
+            config = session.get(InstanceConfig, 1)
+            config.contest_started = True
+            config.contest_ended = ended
+            session.commit()
+        self.current_user.return_value = self.alice
+
+    def test_participant_scope_cannot_be_overridden_and_messages_are_excluded(self):
+        self.start_contest()
+        response = self.client.get("/submissions?participant=admin&user_id=1")
+        self.assertEqual(response.status_code, 200)
+        rows = response.context["rows"]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row["user_id"] for row in rows}, {2})
+        self.assertTrue(all(row["message"] == "" for row in rows))
+        self.assertNotIn("PRIVATE_FLAG", response.text)
+        self.assertNotIn("PRIVATE_QUEUE_DIAGNOSTIC", response.text)
+        self.assertNotIn("Unissued secret service", response.text)
+        self.assertNotIn('name="participant"', response.text)
+        self.assertNotIn("Recorded diagnostics", response.text)
+        self.assertIn('href="/submissions"', response.text)
+        self.assertEqual([service.id for service in response.context["services"]], [1])
+        self.assertEqual(response.context["filters"]["participant"], "")
+        response = self.client.get("/submissions?service=2")
+        self.assertEqual(response.context["total"], 0)
+        self.assertNotIn("Unissued secret service", response.text)
+
+    def test_participants_can_read_history_after_contest_end(self):
+        self.start_contest(ended=True)
+        response = self.client.get("/submissions")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["total"], 2)
+
+    def test_participant_pagination_and_status_filters_are_scoped(self):
+        self.start_contest()
+        with Session(self.engine) as session:
+            for id in range(3, 28):
+                session.add(self.attempt(id, 1, completed=True))
+            session.commit()
+        response = self.client.get("/submissions?page=999&status=queued")
+        self.assertEqual(response.context["page"], 1)
+        self.assertEqual(response.context["total"], 1)
+        self.assertEqual(response.context["rows"][0]["user_id"], 2)
+
+    def test_service_card_links_to_filtered_history(self):
+        self.start_contest()
+        with patch("selfad.routes.participants.get_session_user", return_value=self.alice):
+            response = self.client.get("/services")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("/submissions?service=1", response.text)
+        self.assertIn("View history", response.text)
 
     def test_history_does_not_mutate_scores_or_attempts(self):
         self.client.get("/submissions")

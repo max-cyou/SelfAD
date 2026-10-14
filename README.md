@@ -825,8 +825,11 @@ hidden.
 
 ### Submission history
 
-Administrators can open **Submissions** in the top navigation (`/submissions`)
-to inspect participant attempts, exact checked commits, raw scores, penalties
+Signed-in users can open **Submissions** in the top navigation (`/submissions`).
+Participants see only their own attempts during and after the contest, with
+structured check feedback; private checker messages, logs and flags are never
+included. **View history** on a service card preselects that service.
+Administrators can inspect everyone's attempts, exact checked commits, raw scores, penalties
 and awarded results. Filter by participant, service, repository kind or status;
 the page is paginated in batches of 20 records.
 

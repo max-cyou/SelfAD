@@ -45,7 +45,8 @@ def history_query(user_id: int | None = None):
         attempt.matched_flags.label("matched_flags"),
         attempt.injected_flags.label("injected_flags"),
         attempt.functionality_passed.label("functionality_passed"),
-        attempt.attempt_number.label("attempt_number"), attempt.message.label("message"),
+        attempt.attempt_number.label("attempt_number"),
+        (attempt.message if user_id is None else literal("")).label("message"),
     ).join(ParticipantService, ParticipantService.id == attempt.participant_service_id).join(
         User, User.id == ParticipantService.user_id,
     ).join(Service, Service.id == ParticipantService.service_id)
@@ -58,7 +59,8 @@ def history_query(user_id: int | None = None):
         event.commit_sha,
         case((event.status == RepositoryEventStatus.PENDING, "queued"), else_="running"),
         literal(None), literal(None), literal(None), literal(False), literal(False),
-        literal(None), literal(None), literal(None), literal(None), event.message,
+        literal(None), literal(None), literal(None), literal(None),
+        event.message if user_id is None else literal(""),
     ).join(ParticipantService, or_(
         event.repository_path == ParticipantService.attack_repository_path,
         event.repository_path == ParticipantService.defense_repository_path,

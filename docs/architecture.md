@@ -58,7 +58,10 @@ The module extraction does not change database schema, queue policy or scoring.
 
 ## Administration templates
 
-`selfad/routes/submissions.py` serves the administrator's `/submissions` page.
+`selfad/routes/submissions.py` serves the shared `/submissions` page. Administrators
+see all participants; participant queries are scoped by the authenticated user's
+ID and omit diagnostic messages at the SQL level. Service dropdowns and record
+counts use the same scope, and participant filters cannot override it.
 `selfad/submissions.py` reads retained evaluated attempts and in-flight pushes
 with SQL filtering and pagination. The page does not rerun checks or change
 scoring. Attempt diagnostics are existing recorded messages, not full runtime

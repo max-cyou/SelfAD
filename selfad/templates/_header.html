@@ -14,7 +14,7 @@
       <a{% if request.url.path == '/services' %} class="active"{% endif %} href="/services">Services</a>
     {% endif %}
     {% if contest_state in ('started', 'ended') or (current_user and current_user.is_admin) %}
-      {% if current_user and current_user.is_admin %}<a{% if request.url.path == '/submissions' %} class="active"{% endif %} href="/submissions">Submissions</a>{% endif %}
+      {% if current_user %}<a{% if request.url.path == '/submissions' %} class="active"{% endif %} href="/submissions">Submissions</a>{% endif %}
       <a{% if request.url.path == '/scoreboard' %} class="active"{% endif %} href="/scoreboard">Scoreboard</a>
     {% endif %}
     {% if current_user and current_user.is_admin %}

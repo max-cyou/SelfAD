@@ -34,6 +34,7 @@
                   </div>
                   <span class="score-total">{{ assignment.attack_score + assignment.defense_score }} pts</span>
                 </div>
+                <div class="service-history-link"><a href="{{ url_for('submissions') }}?service={{ service.id }}">View history</a></div>
                 <div class="repository-grid">
                   <div class="repository-link repository-link--source">
                     <span>Source</span><strong>Read-only service</strong>
