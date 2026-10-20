@@ -81,7 +81,10 @@ jobs:
         with:
           python-version: "3.14"
           cache: pip
-      - run: pip install -r requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
       - run: python -m unittest tests.test_postgresql_migrations -v
       - run: python -m unittest tests.test_postgresql_worker_recovery -v
       # The migration tests clean up their schema in tearDown. Recreate the

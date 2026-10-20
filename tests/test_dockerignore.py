@@ -18,6 +18,9 @@ class DockerignoreTests(unittest.TestCase):
             "!main.py",
             "!selfad/**",
             "!docker/**",
+            "!scripts/",
+            "!scripts/event/",
+            "!scripts/event/*.sh",
         ):
             self.assertIn(allowed_path, dockerignore)
 

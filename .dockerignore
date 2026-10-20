@@ -11,3 +11,6 @@
 !selfad/**
 !docker/
 !docker/**
+!scripts/
+!scripts/event/
+!scripts/event/*.sh
