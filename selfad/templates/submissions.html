@@ -63,7 +63,7 @@
             {% if page < pages %}<a href="{{ next_url }}" rel="next">Next →</a>{% else %}<span class="admin-pagination__disabled">Next →</span>{% endif %}
           </nav>
         </section>
-        <p class="submission-retention">Shows up to {{ retention_limit }} latest evaluated attempts per participant/service, plus queued, running and unevaluated failed pushes. Historical maxima and settings are not retained; awarded results are not score increments.</p>
+        <p class="submission-retention">Shows up to {{ retention_limit }} latest evaluated attempts per participant/service, plus queued, running and unevaluated failed pushes. Historical maxima and settings are not displayed; awarded results are not score increments.</p>
       </main>
       {% include "_footer.html" %}
     </div>

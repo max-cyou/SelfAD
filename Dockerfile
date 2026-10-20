@@ -35,6 +35,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 USER root
 
+COPY --from=docker/buildx-bin:0.38.0 /buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
+
 RUN apk add --no-cache python3 py3-pip docker tzdata \
     && python3 -m venv /opt/selfad/venv \
     && addgroup -S -g 10001 selfad \
@@ -57,6 +59,7 @@ COPY alembic.ini .
 COPY migrations ./migrations
 COPY main.py .
 COPY selfad ./selfad
+COPY scripts/event ./scripts/event
 COPY docker/entrypoint.sh /opt/selfad/entrypoint.sh
 COPY docker/selfad-run /etc/s6/selfad/run
 COPY docker/dockerd-run /etc/s6/dockerd/run

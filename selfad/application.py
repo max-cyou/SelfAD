@@ -76,6 +76,8 @@ def validate_public_event_database_policy() -> None:
             raise RuntimeError(
                 "Unsafe public-event scoring: participant requirements are enabled."
             )
+        if scoring and scoring.attack_requirements.strip():
+            raise RuntimeError("Public-event builds are offline: prepare SELFAD_JURY_IMAGE with dependencies and clear attack_requirements.")
 
 
 def apply_security_headers(response):

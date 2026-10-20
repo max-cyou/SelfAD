@@ -36,6 +36,13 @@ if ! command -v systemctl >/dev/null || ! command -v dockerd >/dev/null; then
     exit 69
 fi
 dockerd_path=$(command -v dockerd)
+data_root=${SELFAD_RUNNER_DATA_ROOT:-/var/lib/docker}
+case "$data_root" in /var/lib/docker|/srv/*) ;; *) echo "Use /var/lib/docker or a dedicated /srv/... filesystem." >&2; exit 64;; esac
+if ! mountpoint -q "$data_root"; then
+    echo "Refusing shared OS disk: mount a dedicated Docker filesystem at $data_root first." >&2
+    exit 69
+fi
+python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); assert str(p.resolve())==str(p) and p.stat().st_dev!=pathlib.Path("/").stat().st_dev, "Docker data must use a separate filesystem, not a bind mount of the OS filesystem"' "$data_root"
 if docker ps -aq 2>/dev/null | grep -q .; then
     echo "Refusing a runner host that already has Docker containers." >&2
     exit 73
@@ -56,14 +63,32 @@ elif [ "${SELFAD_RUNNER_FIREWALL_CONFIRMED:-false}" != "true" ]; then
 fi
 
 install -d -m 0700 "$tls_target" "$override_dir"
+install -m 0755 "$(dirname "$0")/runner-firewall.sh" /usr/local/sbin/selfad-runner-firewall
+/usr/local/sbin/selfad-runner-firewall "$control_plane_ip"
+cat > /etc/systemd/system/selfad-runner-firewall.service <<EOF
+[Unit]
+Description=SelfAD dedicated runner API and job-network firewall
+Before=docker.service
+After=network-pre.target ufw.service
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/selfad-runner-firewall $control_plane_ip
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable selfad-runner-firewall.service
 install -m 0600 "$tls_source/key.pem" "$tls_target/key.pem"
 install -m 0644 "$tls_source/ca.pem" "$tls_target/ca.pem"
 install -m 0644 "$tls_source/cert.pem" "$tls_target/cert.pem"
 
 cat > "$override_file" <<EOF
+[Unit]
+Requires=selfad-runner-firewall.service
+After=selfad-runner-firewall.service
 [Service]
 ExecStart=
-ExecStart=$dockerd_path -H fd:// -H tcp://0.0.0.0:2376 --tlsverify --tlscacert=/etc/docker/selfad-tls/ca.pem --tlscert=/etc/docker/selfad-tls/cert.pem --tlskey=/etc/docker/selfad-tls/key.pem --userns-remap=default --icc=false --live-restore
+ExecStart=$dockerd_path -H fd:// -H tcp://0.0.0.0:2376 --data-root=$data_root --feature containerd-snapshotter=false --tlsverify --tlscacert=/etc/docker/selfad-tls/ca.pem --tlscert=/etc/docker/selfad-tls/cert.pem --tlskey=/etc/docker/selfad-tls/key.pem --userns-remap=default --icc=false --live-restore --default-cgroupns-mode=private --log-driver=local --log-opt max-size=5m --log-opt max-file=2
 EOF
 
 systemctl daemon-reload

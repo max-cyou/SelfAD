@@ -31,6 +31,9 @@ which avoids circular imports.
 | `types.py` | Result records, errors, limits and the shared cache build lock |
 | `process.py` | Bounded subprocess execution, timeouts and termination |
 | `docker.py` | Docker CLI environment, labels, availability and cleanup |
+| `build.py` | Verified bounded BuildKit, offline build steps and image export budgets |
+| `exec_limit.py` | Child-process file-size limit for Docker image exports |
+| `security_check.py` | Explicit live mTLS, network, runtime and build isolation probes |
 | `archive.py` | Safe repository archive extraction |
 | `requirements.py` | Dependency validation and Python runtime image preparation |
 | `cache.py` | Canonical service image names and pruning |
@@ -38,7 +41,7 @@ which avoids circular imports.
 | `output.py` | Flag parsing, stdout noise and log formatting |
 | `check.py` | Build, start, check functionality, inject flags and execute exploits |
 
-Runtime isolation and resource limits belong in `sandbox.py` and `check.py`.
+Runtime isolation and resource limits belong in `sandbox.py`, `check.py` and `build.py`.
 The archive and process limits are enforced by their respective modules.
 
 ## Repository workers
@@ -64,6 +67,16 @@ scoring additionally sets `scored_at` in the same transaction as score/attempt
 updates and event completion. This marker survives audit-tail pruning. Runtime
 transport failures are typed separately from contestant failures; an independent
 daemon probe prevents contestant output from spoofing a free retry.
+
+Migration `0005` and `selfad/admission.py` persist immutable push admission
+context and a unique logical push key. Webhook admission serializes against
+round/contest closure and checks Gitea HEAD under the assignment lock. Accepted
+jobs carry their context in `RepositoryBatch`, so workers evaluate pinned
+canonical refs and rules even after closure. `ScoringSettings.locked_rules_json`
+locks numeric rules once any push is accepted; the admin route also prevents
+changes during/after a contest or when prior scores exist. No automatic score
+recalculation is performed. PostgreSQL admission/concurrency tests run in isolated
+schemas alongside the worker recovery tests.
 
 ## Administration templates
 

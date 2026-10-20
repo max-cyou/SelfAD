@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from selfad.runtime.types import (
 from selfad.settings import (
     get_runner_instance_id,
     get_runner_settings,
+    public_event_mode_enabled,
 )
 
 
@@ -35,7 +37,28 @@ def runner_is_available() -> bool:
         result = _docker(["info", "--format", "{{.ServerVersion}}"], timeout=10)
     except RunnerError:
         return False
-    return result.returncode == 0
+    if result.returncode != 0:
+        return False
+    if public_event_mode_enabled():
+        from selfad.runtime.build import verify_builder
+
+        try:
+            if int(result.stdout.strip().split(".")[0]) < 28:
+                return False
+            import json
+
+            security = _docker(["info", "--format", "{{json .SecurityOptions}}"], timeout=10)
+            options = json.loads(security.stdout)
+            if (
+                security.returncode
+                or not any("name=userns" in item for item in options)
+                or not any("name=seccomp" in item for item in options)
+            ):
+                return False
+            verify_builder()
+        except (RunnerError, ValueError, TypeError):
+            return False
+    return True
 
 
 def runner_mode() -> str:
@@ -103,6 +126,7 @@ def _docker(
     *,
     timeout: int,
     max_output: int = MAX_COMMAND_OUTPUT,
+    file_limit: int | None = None,
 ) -> CommandResult:
     WORK_DIR.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="docker-cli-", dir=WORK_DIR) as home:
@@ -119,19 +143,42 @@ def _docker(
             environment.pop("DOCKER_CERT_PATH", None)
         environment["HOME"] = home
         environment["DOCKER_CONFIG"] = str(Path(home) / ".docker")
+        environment.pop("DOCKER_CONTEXT", None)
+        if arguments and arguments[0] in {"buildx", "context"}:
+            config = WORK_DIR / "docker-buildx-config"
+            config.mkdir(mode=0o700, parents=True, exist_ok=True)
+            environment["DOCKER_CONFIG"] = str(config)
+        environment["BUILDX_CONFIG"] = str(WORK_DIR / "buildx")
+
         def daemon_available():
             try:
-                return _run_command(
-                    ["docker", "info", "--format", "{{.ServerVersion}}"],
-                    timeout=10, max_output=MAX_COMMAND_OUTPUT, environment=environment,
-                ).returncode == 0
+                return (
+                    _run_command(
+                        ["docker", "info", "--format", "{{.ServerVersion}}"],
+                        timeout=10,
+                        max_output=MAX_COMMAND_OUTPUT,
+                        environment=environment,
+                    ).returncode
+                    == 0
+                )
             except RunnerError:
                 return False
 
         try:
+            command = ["docker", *arguments]
+            if file_limit is not None:
+                command = [
+                    sys.executable,
+                    "-m",
+                    "selfad.runtime.exec_limit",
+                    str(file_limit),
+                    *command,
+                ]
             result = _run_command(
-                ["docker", *arguments], timeout=timeout,
-                max_output=max_output, environment=environment,
+                command,
+                timeout=timeout,
+                max_output=max_output,
+                environment=environment,
             )
         except RunnerError as error:
             if arguments[0] != "info" and not daemon_available():

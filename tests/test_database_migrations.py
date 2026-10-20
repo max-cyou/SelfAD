@@ -39,7 +39,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     version = connection.scalar(
                         text("SELECT version_num FROM alembic_version")
                     )
-                self.assertEqual(version, "0004")
+                self.assertEqual(version, "0005")
                 service_checks = {
                     check["name"]: check["sqltext"]
                     for check in schema.get_check_constraints("services")
@@ -77,6 +77,31 @@ class DatabaseMigrationTests(unittest.TestCase):
             finally:
                 engine.dispose()
 
+    def test_admission_upgrade_and_downgrade_preserve_legacy_duplicates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database_url = f"sqlite:///{Path(directory) / 'admission.db'}"
+            self._initialize(database_url)
+            environment = {**os.environ, 'SELFAD_DATABASE_URL': database_url}
+            result = subprocess.run([sys.executable, '-m', 'alembic', 'downgrade', '0004'],
+                                    cwd=PROJECT_DIR, env=environment, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            engine = create_engine(database_url)
+            try:
+                with engine.begin() as connection:
+                    for delivery in ('one', 'two'):
+                        connection.execute(text(
+                            "INSERT INTO repository_events (delivery_id, repository_path, ref, "
+                            "commit_sha, status, attempts, message, received_at) VALUES "
+                            "(:delivery, 'player/attack', 'refs/heads/main', 'abc', 'done', 1, '', CURRENT_TIMESTAMP)"
+                        ), {'delivery': delivery})
+                self._initialize(database_url)
+                with engine.connect() as connection:
+                    self.assertEqual(connection.scalar(text('SELECT COUNT(*) FROM repository_events')), 2)
+                columns = {column['name'] for column in inspect(engine).get_columns('repository_events')}
+                self.assertTrue({'push_key', 'admission_json', 'admitted_at'} <= columns)
+            finally:
+                engine.dispose()
+
     def test_existing_database_is_adopted(self):
         with tempfile.TemporaryDirectory() as directory:
             database_url = f"sqlite:///{Path(directory) / 'legacy.db'}"
@@ -106,7 +131,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     version = connection.scalar(
                         text("SELECT version_num FROM alembic_version")
                     )
-                self.assertEqual(version, "0004")
+                self.assertEqual(version, "0005")
                 columns = {
                     column["name"]
                     for column in inspect(engine).get_columns("instance_config")

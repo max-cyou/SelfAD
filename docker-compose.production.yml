@@ -45,6 +45,8 @@ services:
       SELFAD_SECRET_KEY: ${SELFAD_SECRET_KEY:?Set a 32+ character random value}
       SELFAD_SETUP_TOKEN: ${SELFAD_SETUP_TOKEN:?Set a 32+ character random setup token}
       SELFAD_WORKER_CONCURRENCY: ${SELFAD_WORKER_CONCURRENCY:-1}
+      SELFAD_RUNNER_BUILDER: ${SELFAD_RUNNER_BUILDER:-selfad-secure}
+      SELFAD_JURY_IMAGE: ${SELFAD_JURY_IMAGE:-python:3.13-alpine}
       SELFAD_TRUST_PROXY_HEADERS: "true"
       SELFAD_TRUSTED_PROXY_HOSTS: 172.30.0.2
     volumes:

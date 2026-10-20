@@ -1,3 +1,4 @@
+import json
 import unittest
 from html.parser import HTMLParser
 from unittest.mock import patch
@@ -7,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from selfad.admission import RULE_FIELDS, rules_dict
 from selfad.application import create_app
 from selfad.database import Base, get_session
 from selfad.models import BrandingSettings, InstanceConfig, ScoringSettings, User
@@ -113,6 +115,42 @@ class AdminSettingsLayoutTests(unittest.TestCase):
             "penalize_check_errors": "on",
             "attack_requirements": "requests==2.32.5",
         }
+
+    def test_scoring_changes_rejected_after_start_and_after_snapshot_lock(self):
+        for locked_by_snapshot in (False, True):
+            with self.subTest(snapshot=locked_by_snapshot):
+                data = self.form_data()
+                with Session(self.engine) as session:
+                    scoring = session.get(ScoringSettings, 1)
+                    scoring.locked_rules_json = json.dumps(rules_dict(scoring)) if locked_by_snapshot else None
+                    session.get(InstanceConfig, 1).contest_started = not locked_by_snapshot
+                    session.commit()
+                data['attack_max_points'] = '100'
+                response = self.client.post('/admin/registration', data=data)
+                self.assertEqual(response.status_code, 422)
+                self.assertIn('Scoring rules are locked', response.text)
+                with Session(self.engine) as session:
+                    self.assertEqual(session.get(ScoringSettings, 1).attack_max_points, 500)
+
+    def test_unrelated_settings_can_be_saved_while_scoring_is_locked(self):
+        data = self.form_data()
+        with Session(self.engine) as session:
+            session.get(InstanceConfig, 1).contest_started = True
+            scoring = session.get(ScoringSettings, 1)
+            for field in RULE_FIELDS:
+                value = getattr(scoring, field)
+                if isinstance(value, bool):
+                    if value:
+                        data[field] = 'on'
+                    else:
+                        data.pop(field, None)
+                else:
+                    data[field] = str(value)
+            session.commit()
+        data['contest_state'] = 'started'
+        data['gitea_public_enabled'] = 'on'
+        response = self.client.post('/admin/registration', data=data, follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
 
     def test_optional_settings_start_collapsed_with_enabled_controls(self):
         response = self.client.get("/admin")

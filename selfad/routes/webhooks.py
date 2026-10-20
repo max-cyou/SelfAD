@@ -2,15 +2,19 @@ import hashlib
 import hmac
 import json
 import re
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
-from selfad.contest import STARTED, contest_state, start_contest_if_due
+from selfad.admission import snapshot_admission
+from selfad.contest import STARTED, contest_state
 from selfad.database import get_session
+from selfad.gitea import GiteaError, get_branch_commit
 from selfad.models import (
     InstanceConfig,
     ParticipantRepositoryStatus,
@@ -22,7 +26,7 @@ from selfad.models import (
     ServiceStatus,
     ServiceValidationStatus,
 )
-from selfad.settings import get_gitea_webhook_secret
+from selfad.settings import get_gitea_settings, get_gitea_webhook_secret
 
 router = APIRouter()
 
@@ -33,6 +37,24 @@ COMMIT_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?$")
 
 def webhook_response(message: str, status_code: int) -> JSONResponse:
     return JSONResponse({"message": message}, status_code=status_code)
+
+
+async def verify_head(session, repository_path, branch, commit_sha):
+    """Check freshness under the repository lock; execution still pins SHA."""
+    if session.scalar(select(RepositoryEvent.id).where(
+        RepositoryEvent.repository_path == repository_path,
+        RepositoryEvent.ref == f"refs/heads/{branch}",
+        RepositoryEvent.commit_sha == commit_sha,
+    ).limit(1)):
+        return webhook_response("Commit already received.", 202)
+    try:
+        head = await run_in_threadpool(get_branch_commit, get_gitea_settings(),
+                                      repository_path, branch=branch)
+    except GiteaError:
+        return webhook_response("Could not verify push HEAD; retry delivery.", 503)
+    if head.lower() != commit_sha:
+        return webhook_response("Stale push ignored: branch has moved.", 202)
+    return None
 
 
 @router.post("/hooks/gitea", status_code=202)
@@ -101,6 +123,12 @@ async def receive_gitea_webhook(
     ):
         return webhook_response("Invalid push payload.", 400)
 
+    commit_sha = commit_sha.lower()
+    if set(commit_sha) == {"0"}:
+        return webhook_response("Branch deletion ignored.", 202)
+    if session.scalar(select(RepositoryEvent.id).where(RepositoryEvent.delivery_id == delivery_id)):
+        return webhook_response("Delivery already received.", 202)
+    push_key = hashlib.sha256(json.dumps([repository_path, ref, commit_sha]).encode()).hexdigest()
     service = session.scalar(
         select(Service).where(
             or_(
@@ -120,15 +148,37 @@ async def receive_gitea_webhook(
         )
         if participant_service is None:
             return webhook_response("Repository ignored.", 202)
-        service = session.get(Service, participant_service.service_id)
+        # Shared config/service locks serialize admission against admin close,
+        # without serializing independent PostgreSQL repositories with each other.
+        if session.bind.dialect.name == "sqlite":
+            session.execute(update(InstanceConfig).where(InstanceConfig.id == 1).values(
+                site_name=InstanceConfig.site_name,
+            ))
+        config = session.scalar(select(InstanceConfig).where(InstanceConfig.id == 1)
+                                .with_for_update(read=True).execution_options(populate_existing=True))
+        service = session.scalar(select(Service).where(Service.id == participant_service.service_id)
+                                 .with_for_update(read=True).execution_options(populate_existing=True))
         if service is None:
             return webhook_response("Repository ignored.", 202)
         if ref != f"refs/heads/{service.default_branch}":
             return webhook_response("Branch ignored.", 202)
-        config = session.get(InstanceConfig, 1)
-        if start_contest_if_due(config):
-            session.commit()
-        if contest_state(config) != STARTED:
+        if service.status != ServiceStatus.ACTIVE or service.runtime_status != ServiceRunStatus.PASSED:
+            return webhook_response("Participant push ignored: service is closed.", 202)
+        participant_service = session.scalar(select(ParticipantService).where(
+            ParticipantService.id == participant_service.id,
+        ).with_for_update().execution_options(populate_existing=True))
+        if participant_service.service_id != service.id or repository_path not in {
+            participant_service.attack_repository_path, participant_service.defense_repository_path,
+        }:
+            return webhook_response("Repository is no longer managed by this assignment.", 202)
+        if repository_path == participant_service.defense_repository_path and not participant_service.defense_unlocked:
+            return webhook_response("Participant push ignored: defense is locked.", 202)
+        rejected = await verify_head(session, repository_path, service.default_branch, commit_sha)
+        if rejected is not None:
+            return rejected
+        # Test the deadline after waiting for locks and verifying HEAD.
+        admitted_at = datetime.now(timezone.utc)
+        if contest_state(config, now=admitted_at) != STARTED:
             return webhook_response(
                 "Participant push ignored: the contest is not running.",
                 202,
@@ -152,7 +202,12 @@ async def receive_gitea_webhook(
         else:
             participant_service.defense_status = ParticipantRepositoryStatus.RUNNING
             participant_service.defense_message = "Push queued for checking."
-        session.add(RepositoryEvent(delivery_id=delivery_id, repository_path=repository_path, ref=ref, commit_sha=commit_sha.lower()))
+        session.add(RepositoryEvent(
+            delivery_id=delivery_id, repository_path=repository_path, ref=ref,
+            commit_sha=commit_sha, push_key=push_key,
+            admitted_at=admitted_at, received_at=admitted_at,
+            admission_json=snapshot_admission(session, service, participant_service),
+        ))
         try:
             session.commit()
         except IntegrityError:
@@ -162,12 +217,23 @@ async def receive_gitea_webhook(
     if ref != f"refs/heads/{service.default_branch}":
         return webhook_response("Branch ignored.", 202)
 
+    session.execute(update(Service).where(Service.id == service.id).values(
+        repository_generation=Service.repository_generation,
+    ))
+    session.refresh(service)
+    if ref != f"refs/heads/{service.default_branch}":
+        return webhook_response("Branch ignored.", 202)
+    rejected = await verify_head(session, repository_path, service.default_branch, commit_sha)
+    if rejected is not None:
+        return rejected
+
     session.add(
         RepositoryEvent(
             delivery_id=delivery_id,
             repository_path=repository_path,
             ref=ref,
-            commit_sha=commit_sha.lower(),
+            commit_sha=commit_sha,
+            push_key=push_key,
         )
     )
     session.execute(

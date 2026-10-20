@@ -34,7 +34,7 @@ class PostgreSQLMigrationTests(unittest.TestCase):
         with engine.connect() as connection:
             self.assertEqual(
                 connection.scalar(text("SELECT version_num FROM alembic_version")),
-                "0004",
+                "0005",
             )
 
     def test_fresh_postgresql_database_reaches_head(self):

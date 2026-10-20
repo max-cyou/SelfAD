@@ -1,7 +1,9 @@
 import hashlib
+import os
 import shutil
 from pathlib import Path
 
+from selfad.runtime.build import build_image
 from selfad.runtime.docker import (
     _docker,
     _label_arguments,
@@ -14,6 +16,7 @@ from selfad.runtime.types import (
     CommandResult,
     RunnerError,
 )
+from selfad.settings import public_event_mode_enabled
 
 
 def _read_requirements_file(path: Path, *, label: str) -> bytes | None:
@@ -81,10 +84,17 @@ def _prepare_runtime_image(
             raise RunnerError("Could not prepare the fixed jury runtime image.")
 
     if requirements and requirements.strip():
+        if public_event_mode_enabled() or os.getenv("SELFAD_RUNNER_BUILDER"):
+            raise RunnerError(
+                "Offline secure builds cannot install dependencies. Bake approved packages "
+                "into SELFAD_JURY_IMAGE before the event and leave attack requirements empty."
+            )
         _validate_requirements(requirements, label="Requirements")
     context.mkdir()
     shutil.copytree(scripts_path, context / "workspace")
-    dockerfile = "# syntax=docker/dockerfile:1\nFROM python:3.13-alpine\n"
+    if not JURY_IMAGE or any(char.isspace() for char in JURY_IMAGE):
+        raise RunnerError("SELFAD_JURY_IMAGE must be a single Docker image reference.")
+    dockerfile = f"# syntax=docker/dockerfile:1\nFROM {JURY_IMAGE}\n"
     if requirements and requirements.strip():
         (context / "requirements.txt").write_bytes(requirements)
         cache_id = hashlib.sha256(
@@ -102,15 +112,5 @@ def _prepare_runtime_image(
         dockerfile + "COPY workspace /workspace\n",
         encoding="utf-8",
     )
-    build = _docker(
-        [
-            "build",
-            *_label_arguments(RUNNER_LABEL),
-            "--tag",
-            image_name,
-            str(context),
-        ],
-        timeout=300,
-        max_output=2 * 1024 * 1024,
-    )
+    build = build_image(context, image_name, _label_arguments(RUNNER_LABEL))
     return image_name, build

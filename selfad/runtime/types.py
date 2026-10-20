@@ -1,3 +1,4 @@
+import os
 import re
 import threading
 from dataclasses import dataclass
@@ -5,7 +6,7 @@ from dataclasses import dataclass
 from selfad.database import DATA_DIR
 
 WORK_DIR = DATA_DIR / "work"
-JURY_IMAGE = "python:3.13-alpine"
+JURY_IMAGE = os.getenv("SELFAD_JURY_IMAGE", "python:3.13-alpine")
 MAX_ARCHIVE_FILES = 2_000
 MAX_EXTRACTED_BYTES = 64 * 1024 * 1024
 MAX_COMMAND_OUTPUT = 128 * 1024

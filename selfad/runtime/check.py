@@ -1,3 +1,4 @@
+import json
 import tempfile
 import uuid
 from pathlib import Path
@@ -6,6 +7,7 @@ from selfad.gitea import download_repository_archive
 from selfad.runtime.archive import (
     _extract_repository_archive,
 )
+from selfad.runtime.build import build_image
 from selfad.runtime.cache import (
     _prune_service_image_cache,
     _service_cache_image_name,
@@ -129,17 +131,7 @@ def run_service_runtime_check(
                 )
             if not service_image_cached:
                 build_labels = (SERVICE_CACHE_LABEL,) if cache_service_image else (RUNNER_LABEL,)
-                build = _docker(
-                    [
-                        "build",
-                        *_label_arguments(*build_labels),
-                        "--tag",
-                        image_name,
-                        str(source_path),
-                    ],
-                    timeout=300,
-                    max_output=2 * 1024 * 1024,
-                )
+                build = build_image(source_path, image_name, _label_arguments(*build_labels))
                 build_log = build.output
                 if build.returncode != 0:
                     return RuntimeCheckResult(
@@ -192,11 +184,24 @@ def run_service_runtime_check(
                         _format_log("attack dependencies", exploit_build.output),
                     )
 
+            for runtime_image in {image_name, jury_image, exploit_image}:
+                volumes = _docker(["image", "inspect", "--format", "{{json .Config.Volumes}}", runtime_image], timeout=15)
+                try:
+                    declared = json.loads(volumes.stdout)
+                except ValueError as error:
+                    raise RunnerError("Cannot verify image volume declarations.") from error
+                if volumes.returncode or declared:
+                    raise RunnerError("Service/jury images must not declare VOLUME; use bounded tmpfs instead.")
+
             network = _docker(
                 [
                     "network",
                     "create",
                     "--internal",
+                    "--ipv6=false",
+                    "--opt", "com.docker.network.bridge.gateway_mode_ipv4=isolated",
+                    "--opt", "com.docker.network.bridge.gateway_mode_ipv6=isolated",
+                    "--opt", f"com.docker.network.bridge.name=sad-{job_id[:10]}",
                     *_label_arguments(RUNNER_LABEL),
                     network_name,
                 ],
@@ -209,6 +214,11 @@ def run_service_runtime_check(
                 [
                     "run",
                     "--detach",
+                    "--user", "10001:10001",
+                    "--log-driver", "local",
+                    "--log-opt", "max-size=5m", "--log-opt", "max-file=2",
+                    "--shm-size", "8m",
+                    "--ulimit", "core=0:0",
                     "--name",
                     service_name,
                     *_label_arguments(RUNNER_LABEL),
@@ -235,9 +245,9 @@ def run_service_runtime_check(
                     "no-new-privileges",
                     "--read-only",
                     "--tmpfs",
-                    "/tmp:rw,noexec,nosuid,size=64m",
+                    "/tmp:rw,noexec,nosuid,nodev,size=64m",
                     "--tmpfs",
-                    "/run:rw,noexec,nosuid,size=16m",
+                    "/run:rw,noexec,nosuid,nodev,size=16m",
                     image_name,
                 ],
                 timeout=30,

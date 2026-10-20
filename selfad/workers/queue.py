@@ -152,6 +152,7 @@ def _claim_repository_batch() -> RepositoryBatch | None:
                 repository_path=event.repository_path,
                 commit_sha=latest_event.commit_sha,
                 processing_token=claim_token,
+                admission_json=latest_event.admission_json,
             )
 
         claim_token = uuid.uuid4().hex

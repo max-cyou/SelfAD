@@ -9,12 +9,12 @@ class RunnerIsolationCheckTests(unittest.TestCase):
         script = (
             PROJECT_DIR / "scripts" / "event" / "runner-isolation-check.sh"
         ).read_text(encoding="utf-8")
-        self.assertIn("network create --internal", script)
-        self.assertIn("--memory 256m", script)
-        self.assertIn("--pids-limit 128", script)
-        self.assertIn("--read-only", script)
-        self.assertIn("1.1.1.1", script)
-        self.assertIn("egress_blocked", script)
+        self.assertIn("selfad.runtime.security_check", script)
+        probe = (PROJECT_DIR / "selfad/runtime/security_check.py").read_text()
+        for required in ('verify_builder()', 'check_api_authentication()', 'OOMKilled', 'PID_PROBE',
+                         'gateway_mode_ipv4=isolated', '169.254.169.254', '2376', '1.1.1.1',
+                         'no-new-privileges', 'socket.create_connection((sys.argv[1],8080)'):
+            self.assertIn(required, probe)
 
 
 if __name__ == "__main__":

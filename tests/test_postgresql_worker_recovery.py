@@ -7,6 +7,7 @@ import uuid
 from sqlalchemy import create_engine
 from sqlalchemy.schema import CreateSchema, DropSchema
 
+from tests import test_submission_admission as admission_tests
 from tests import test_worker_recovery as recovery_tests
 
 DATABASE_URL = os.getenv("SELFAD_TEST_POSTGRES_URL", "")
@@ -29,3 +30,8 @@ class PostgreSQLWorkerRecoveryTests(recovery_tests.WorkerRecoveryTests):
 
         self.addCleanup(cleanup)
         return create_engine(DATABASE_URL, execution_options={"schema_translate_map": {None: schema}})
+
+
+@unittest.skipUnless(DATABASE_URL.startswith("postgresql"), "PostgreSQL admission tests not configured")
+class PostgreSQLSubmissionAdmissionTests(admission_tests.SubmissionAdmissionTests):
+    fixture_class = PostgreSQLWorkerRecoveryTests

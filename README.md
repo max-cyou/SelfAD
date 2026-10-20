@@ -296,8 +296,8 @@ with the runner's SSH user:
 scp -r /srv/selfad/runner-1-tls/runner \
   admin@10.0.0.20:/tmp/selfad-runner-tls
 
-scp scripts/event/runner-install.sh \
-  admin@10.0.0.20:/tmp/runner-install.sh
+scp scripts/event/runner-install.sh scripts/event/runner-firewall.sh \
+  admin@10.0.0.20:/tmp/
 ```
 
 Back up `ca-key.pem` offline before deleting it from the control plane. It is
@@ -321,6 +321,13 @@ sudo ufw allow OpenSSH
 sudo ufw --force enable
 ```
 
+Use Docker Engine 28+, Linux cgroup v2, Python 3, iptables and ip6tables.
+Provision a **separate filesystem** at `/var/lib/docker` first; the installer
+refuses the OS filesystem and bind mounts of it. Attach and mount a dedicated
+disk using your provider's instructions; never format an existing disk with
+data. For another mount point under `/srv/`, pass
+`SELFAD_RUNNER_DATA_ROOT=/srv/runner-docker` to the installer.
+
 Install the Docker TLS listener. The final argument is the control plane's
 **private** IP:
 
@@ -330,7 +337,9 @@ sudo /tmp/runner-install.sh /tmp/selfad-runner-tls 10.0.0.10
 ```
 
 The installer refuses a machine that already contains Docker containers. It
-also adds a UFW rule allowing port `2376` only from `10.0.0.10`. If an external
+enables user namespaces, private cgroup namespaces and bounded local logs,
+installs persistent host-input firewall rules for job bridges, and adds a UFW
+rule allowing port `2376` only from `10.0.0.10`. If an external
 cloud firewall is used instead of active UFW, create that restriction first,
 then run:
 
@@ -342,7 +351,7 @@ sudo SELFAD_RUNNER_FIREWALL_CONFIRMED=true \
 Remove the transfer copy after installation:
 
 ```bash
-sudo rm -rf /tmp/selfad-runner-tls /tmp/runner-install.sh
+sudo rm -rf /tmp/selfad-runner-tls /tmp/runner-install.sh /tmp/runner-firewall.sh
 exit
 ```
 
@@ -365,15 +374,8 @@ The output must show both `Client` and `Server`. A timeout means the private
 route or firewall is wrong. `x509` errors mean the address does not match the
 certificate or the wrong bundle was copied.
 
-Optionally verify the job restrictions before starting SelfAD:
-
-```bash
-SELFAD_RUNNER_DOCKER_HOST=tcp://10.0.0.20:2376 \
-SELFAD_RUNNER_CERT_PATH=/srv/selfad/runner-1-tls/control-plane \
-  ./scripts/event/runner-isolation-check.sh
-```
-
-The final line must be `egress_blocked`.
+The mandatory builder initialization and isolation checks run after starting
+the control-plane container in step 8 below.
 
 Give the container's unprivileged SelfAD user access to the client bundle. UID
 `10001` is fixed by the project Dockerfile:
@@ -444,7 +446,24 @@ sudo docker compose -f docker-compose.production.yml up -d --build
 sudo docker compose -f docker-compose.production.yml ps
 ```
 
-Caddy obtains certificates automatically. If a container is unhealthy, do
+Initialize the bounded BuildKit builder on the runner, then run the disposable
+isolation probes. Replace `10.0.0.10` with the actual control-plane address:
+
+```bash
+sudo docker compose -f docker-compose.production.yml exec --user 10001 selfad \
+  /opt/selfad/venv/bin/python -m selfad.runtime.build --initialize
+sudo docker compose -f docker-compose.production.yml exec --user 10001 selfad \
+  sh /app/scripts/event/runner-isolation-check.sh --control-host 10.0.0.10
+```
+
+Initialization refuses an existing unsafe builder. Public readiness remains
+false until inspection passes. The live check must exit zero and finish with
+`PASS mTLS rejection, builder/runtime limits, network checks, OOM and PID caps`.
+It creates disposable resources and performs bounded memory/PID exhaustion
+probes: run it before admitting participants. See the
+[runner hardening and compatibility requirements](docs/runner-host.md).
+
+Caddy obtains certificates automatically. If a container remains unhealthy, do
 not continue to setup; inspect it first:
 
 ```bash
@@ -823,6 +842,41 @@ earliest first solution, username. Places are always unique and sequential;
 the tie-breakers determine the order for equal scores. Zero-point users are
 hidden.
 
+### Admission, round closure and fixed scoring rules
+
+A participant push is admitted only while the contest is running and the service
+is **active** with a passed runtime check. Default-branch HEAD is verified against
+Gitea under repository/admission locks. A delayed notification for an older HEAD
+is ignored; if Gitea cannot be reached, the webhook returns HTTP 503 so delivery
+can be retried. Admission time is decided after waiting for locks and verifying
+HEAD, not from contestant-controlled commit timestamps.
+
+Admission records a snapshot of canonical service/jury commits, runtime settings,
+expected Dockerfiles, dependencies and scoring rules. Accepted work remains
+eligible when the service is disabled or the contest ends, including retries
+after infrastructure failure. Closing a round stops **new** admissions; it does
+not cancel accepted checks. Results and the final ranking may therefore settle
+after the deadline, once the accepted queue has drained. Deleted assignments or
+services cannot be evaluated. Pending pushes still use the latest-wins policy.
+
+Both delivery IDs and logical `(repository, ref, commit SHA)` identity are
+deduplicated. Another delivery ID for an already-received commit does not create
+an attempt or penalty. To submit again after correcting an infrastructure problem,
+push a **new commit** (an empty commit is sufficient if no code change is needed).
+
+Reward formulas, maxima and penalty rules cannot be edited through the admin API
+after the contest starts or scoring history exists. The first accepted push also
+persists a rules lock which survives switching the contest back to not-started.
+Registration, Git visibility and runtime dependency settings remain configurable;
+runtime changes apply only to subsequent admissions. There is no implicit score
+recalculation or reset when editing settings. Use a fresh installation/database
+for a new contest with different reward rules. Historical scores are not rewritten.
+
+Migration `0005` adds these admission snapshots. Old records are preserved, but
+missing historic rules/canonical refs cannot be reconstructed. Drain legacy queued
+checks before upgrading a live contest; existing unversioned events retain their
+previous start-time eligibility behavior.
+
 ### Submission history
 
 Signed-in users can open **Submissions** in the top navigation (`/submissions`).
@@ -838,7 +892,8 @@ History includes the last 50 evaluated attempts per participant/service
 default branch. Superseded or rejected pushes that were never evaluated are
 not scored attempts. Recorded timestamps are UTC: receipt time for in-flight
 pushes and evaluation time for completed attempts. Awarded results are not
-score increments, and historical settings/maxima are not retained. Diagnostic
+score increments. New admissions retain rule snapshots internally; older records
+may not have them. Diagnostic
 messages are available to administrators; full runtime logs and exact check
 durations are not stored in this history.
 

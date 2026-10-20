@@ -1,5 +1,8 @@
+from types import SimpleNamespace
+
 from sqlalchemy import select
 
+from selfad.admission import restore_admission
 from selfad.contest import STARTED, contest_state, start_contest_if_due
 from selfad.database import SessionLocal
 from selfad.gitea import GiteaError, GiteaUnavailable
@@ -65,7 +68,7 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
         config = session.get(InstanceConfig, 1)
         if start_contest_if_due(config):
             session.commit()
-        if contest_state(config) != STARTED:
+        if not batch.admission_json and contest_state(config) != STARTED:
             message = "Submission ignored: the contest is not running."
             if is_attack:
                 player.attack_status = ParticipantRepositoryStatus.FAILED
@@ -82,9 +85,15 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
             session.commit()
             return True
         scoring_settings = get_scoring_settings(session)
+        admission = None
+        if batch.admission_json:
+            admission, scoring_settings = restore_admission(batch.admission_json)
+            service = SimpleNamespace(**admission["runtime"])
         expected_dockerfile = (
             player.attack_dockerfile_sha if is_attack else player.defense_dockerfile_sha
         )
+        if admission:
+            expected_dockerfile = admission["attack_dockerfile_sha" if is_attack else "defense_dockerfile_sha"]
         repository_path = batch.repository_path
         jury_path = service.jury_repository_path
         if not jury_path:
@@ -96,7 +105,7 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
             )
             session.commit()
             return True
-        if not is_attack and not player.defense_unlocked:
+        if not batch.admission_json and not is_attack and not player.defense_unlocked:
             player.defense_status = ParticipantRepositoryStatus.FAILED
             player.defense_message = "Defense unlocks after a successful attack."
             _finish_events(
@@ -223,6 +232,8 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
             session.commit()
             return True
         scoring = get_scoring_settings(session)
+        if batch.admission_json:
+            _, scoring = restore_admission(batch.admission_json)
         kind = ATTACK if is_attack else DEFENSE
         matched_flags = runtime.matched_flags if runtime is not None else 0
         injected_flags = runtime.injected_flags if runtime is not None else 0

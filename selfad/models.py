@@ -152,6 +152,7 @@ class ScoringSettings(Base):
     __tablename__ = "scoring_settings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    locked_rules_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     attack_reward_mode: Mapped[str] = mapped_column(
         String(16), default="coverage", nullable=False
     )
@@ -380,6 +381,9 @@ class RepositoryEvent(Base):
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     retry_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    admitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    admission_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    push_key: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
 
 
 class User(Base):

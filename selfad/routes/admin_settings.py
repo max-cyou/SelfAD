@@ -3,13 +3,15 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
+from selfad.admission import RULE_FIELDS
 from selfad.auth import csrf_token_is_valid
 from selfad.branding import HEX_COLOR_PATTERN, PALETTE_FIELDS, get_branding_context
-from selfad.contest import CONTEST_STATES, ENDED, STARTED
+from selfad.contest import CONTEST_STATES, ENDED, NOT_STARTED, STARTED, contest_state
 from selfad.database import get_session
-from selfad.models import BrandingSettings, InstanceConfig, PaletteSettings
+from selfad.models import BrandingSettings, InstanceConfig, PaletteSettings, ParticipantService
 from selfad.routes.admin_shared import (
     get_admin_access,
     parse_scoring_form,
@@ -26,6 +28,8 @@ def add_public_scoring_errors(
     scoring_values: dict[str, object],
     errors: dict[str, str],
 ) -> None:
+    if public_event_mode_enabled() and str(scoring_values.get("attack_requirements", "")).strip():
+        errors["attack_requirements"] = "Public-event builds are offline; bake dependencies into SELFAD_JURY_IMAGE."
     if (
         public_event_mode_enabled()
         and scoring_values["allow_user_attack_requirements"]
@@ -192,7 +196,12 @@ async def update_registration(
     if not csrf_token_is_valid(request, form.get("csrf_token")):
         return HTMLResponse("Invalid CSRF token.", status_code=403)
 
-    config = session.get(InstanceConfig, 1)
+    if session.bind.dialect.name == "sqlite":
+        session.execute(update(InstanceConfig).where(InstanceConfig.id == 1).values(
+            site_name=InstanceConfig.site_name,
+        ))
+    config = session.scalar(select(InstanceConfig).where(InstanceConfig.id == 1)
+                            .with_for_update().execution_options(populate_existing=True))
     if config is None:
         return RedirectResponse(url="/setup", status_code=303)
 
@@ -214,6 +223,15 @@ async def update_registration(
     errors: dict[str, str] = {}
     errors.update(scoring_errors)
     add_public_scoring_errors(scoring_values, errors)
+    current_scoring = get_scoring_settings(session)
+    historical_scores = session.scalar(select(ParticipantService.id).where(or_(
+        ParticipantService.attack_attempt_count > 0, ParticipantService.defense_attempt_count > 0,
+        ParticipantService.attack_score > 0, ParticipantService.defense_score > 0,
+    )).limit(1))
+    if current_scoring.locked_rules_json or contest_state(config) != NOT_STARTED or historical_scores:
+        for field in RULE_FIELDS:
+            if field in scoring_values and scoring_values[field] != getattr(current_scoring, field):
+                errors[field] = "Scoring rules are locked once the contest starts or a push is admitted."
     if requested_contest_state not in CONTEST_STATES:
         errors["contest_state"] = "Choose a valid contest state."
     if contest_starts_at_local:

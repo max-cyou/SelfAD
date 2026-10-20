@@ -12,3 +12,4 @@ class RepositoryBatch:
     source_commit: str | None = None
     jury_commit: str | None = None
     processing_token: str | None = None
+    admission_json: str | None = None
