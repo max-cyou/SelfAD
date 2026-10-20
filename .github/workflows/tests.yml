@@ -74,6 +74,7 @@ jobs:
           --health-retries 12
     env:
       SELFAD_DATABASE_URL: postgresql+psycopg://selfad:selfad-test-password@127.0.0.1:5432/selfad_test
+      SELFAD_TEST_POSTGRES_URL: postgresql+psycopg://selfad:selfad-test-password@127.0.0.1:5432/selfad_test
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
@@ -82,6 +83,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: python -m unittest tests.test_postgresql_migrations -v
+      - run: python -m unittest tests.test_postgresql_worker_recovery -v
       # The migration tests clean up their schema in tearDown. Recreate the
       # versioned schema before asking Alembic to compare it with the models.
       - run: alembic upgrade head

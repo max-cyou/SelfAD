@@ -50,11 +50,20 @@ checks. Supporting modules live in `selfad/workers/`:
 | --- | --- |
 | `types.py` | Immutable batch identifiers, generations and commit SHAs |
 | `queue.py` | Claim/recover events, detect superseded batches and finish events |
+| `recovery.py` | Heartbeat leases, stale-worker fencing and bounded delayed retries |
 | `participant.py` | Attack/defense checks and submission score persistence |
 
 The worker calls the Gitea and runtime APIs. `selfad/scoring.py` remains
 responsible for score formulas and attempt history; it does not execute code.
 The module extraction does not change database schema, queue policy or scoring.
+
+Worker recovery migration `0004` adds `heartbeat_at`, `retry_after` and
+`scored_at` to repository events. All result transactions first conditionally
+update processing events by ownership token and unexpired lease. Participant
+scoring additionally sets `scored_at` in the same transaction as score/attempt
+updates and event completion. This marker survives audit-tail pruning. Runtime
+transport failures are typed separately from contestant failures; an independent
+daemon probe prevents contestant output from spoofing a free retry.
 
 ## Administration templates
 

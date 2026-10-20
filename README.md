@@ -834,13 +834,39 @@ and awarded results. Filter by participant, service, repository kind or status;
 the page is paginated in batches of 20 records.
 
 History includes the last 50 evaluated attempts per participant/service
-(attack and defense combined), plus queued/running pushes on the service's
+(attack and defense combined), plus queued/running and unevaluated failed pushes on the service's
 default branch. Superseded or rejected pushes that were never evaluated are
 not scored attempts. Recorded timestamps are UTC: receipt time for in-flight
 pushes and evaluation time for completed attempts. Awarded results are not
 score increments, and historical settings/maxima are not retained. Diagnostic
 messages are available to administrators; full runtime logs and exact check
 durations are not stored in this history.
+
+### Worker failure recovery
+
+Repository events and scoring results live in the database, not in the runner.
+Each claimed batch has a unique ownership token and a heartbeat every 10 seconds.
+A watchdog checks every 10 seconds and returns work to the queue if its heartbeat
+has been absent for 120 seconds. A 30-minute hard deadline also expires the lease
+even if heartbeats continue. Expiration fences the old worker's database writes;
+it does not forcibly terminate a stuck Python thread.
+
+Confirmed Docker daemon/transport outages, unavailable Gitea and unexpected
+worker exceptions are retried after 30 seconds, up to three deliveries total
+(including the first run and restart recoveries). These retries do not create
+scoring attempts, change best scores or accrue penalty debt, even when
+`penalize_check_errors` is enabled. Normal exploit/checker failures and script
+timeouts with a healthy daemon retain the configured scoring/penalty policy.
+After the budget is exhausted, the push remains explicitly failed in history;
+the participant can submit a new push once infrastructure is restored.
+
+On platform startup, interrupted processing events are recovered using the same
+retry budget. Recovery may coalesce pending pushes: a newer push supersedes an
+older commit, as during normal queue processing. The final attempt, counters,
+best score, durable event scoring marker and event completion are committed in
+one transaction. Ownership checks reject stale/duplicate completions, including
+after attempt-history pruning. A commit failure rolls everything back; an
+acknowledgement lost after a successful commit cannot award points a second time.
 
 ## Security Model
 

@@ -41,7 +41,7 @@
                         <p>Attempt #{{ row.attempt_number }}. {{ row.matched_flags }} of {{ row.injected_flags }} flags recovered. Functionality: {{ 'passed' if row.functionality_passed else 'not passed' }}.</p>
                         <p>{% if row.improved %}{{ row.raw_score }} raw − {{ row.penalty }} penalty = {{ row.awarded_score }} pts. The stored best score never decreases.{% else %}No new raw-score best. No points awarded; the stored best score is unchanged.{% endif %}</p>
                         <p>{{ 'This attempt counts toward unsuccessful-attempt penalties.' if row.penalty_eligible else 'This attempt does not count toward unsuccessful-attempt penalties.' }}</p>
-                      {% else %}<p>{{ 'Waiting for a worker.' if row.status == 'queued' else 'This submission is being checked.' }} Scores are unchanged until evaluation finishes.</p>{% endif %}
+                      {% else %}<p>{% if row.status == 'error' %}This push was not evaluated. No scoring attempt or penalty was recorded; the best score is unchanged.{% else %}{{ 'Waiting for a worker.' if row.status == 'queued' else 'This submission is being checked.' }} Scores are unchanged until evaluation finishes.{% endif %}</p>{% endif %}
                       <p class="submission-sha">Commit: <code>{{ row.commit_sha }}</code></p>
                       {% if current_user.is_admin %}
                         <h3>Recorded diagnostics</h3><pre>{{ row.message or 'No diagnostic message recorded.' }}</pre>
@@ -63,7 +63,7 @@
             {% if page < pages %}<a href="{{ next_url }}" rel="next">Next →</a>{% else %}<span class="admin-pagination__disabled">Next →</span>{% endif %}
           </nav>
         </section>
-        <p class="submission-retention">Shows up to {{ retention_limit }} latest evaluated attempts per participant/service, plus queued and running pushes. Historical maxima and settings are not retained; awarded results are not score increments.</p>
+        <p class="submission-retention">Shows up to {{ retention_limit }} latest evaluated attempts per participant/service, plus queued, running and unevaluated failed pushes. Historical maxima and settings are not retained; awarded results are not score increments.</p>
       </main>
       {% include "_footer.html" %}
     </div>

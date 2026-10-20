@@ -377,6 +377,9 @@ class RepositoryEvent(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retry_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class User(Base):

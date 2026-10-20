@@ -2,7 +2,7 @@ from sqlalchemy import select
 
 from selfad.contest import STARTED, contest_state, start_contest_if_due
 from selfad.database import SessionLocal
-from selfad.gitea import GiteaError
+from selfad.gitea import GiteaError, GiteaUnavailable
 from selfad.models import (
     InstanceConfig,
     ParticipantRepositoryStatus,
@@ -17,6 +17,7 @@ from selfad.runner import (
     build_attack_runtime_requirements,
     run_service_runtime_check,
 )
+from selfad.runtime.types import RunnerInfrastructureError
 from selfad.scoring import (
     ATTACK,
     DEFENSE,
@@ -30,6 +31,7 @@ from selfad.workers.queue import (
     _batch_is_superseded,
     _finish_events,
 )
+from selfad.workers.recovery import lock_batch
 from selfad.workers.types import (
     RepositoryBatch,
 )
@@ -37,6 +39,8 @@ from selfad.workers.types import (
 
 def _process_participant_batch(batch: RepositoryBatch) -> bool:
     with SessionLocal() as session:
+        if not lock_batch(session, batch):
+            return True
         player = session.get(ParticipantService, batch.participant_service_id)
         service = session.get(Service, batch.service_id)
         if player is None or service is None or not batch.repository_path or not batch.commit_sha:
@@ -179,6 +183,8 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
                 jury_repository_path=jury_path,
                 contract=contract,
             )
+    except (GiteaUnavailable, RunnerInfrastructureError):
+        raise
     except (GiteaError, RunnerError) as error:
         runtime = None
         error_message = str(error)
@@ -186,6 +192,10 @@ def _process_participant_batch(batch: RepositoryBatch) -> bool:
         error_message = ""
 
     with SessionLocal() as session:
+        # Claim the durable result fence before locking player counters. This
+        # transaction also stores the attempt, best score and DONE event state.
+        if not lock_batch(session, batch, scoring=True):
+            return True
         # Serialize the final result with webhook status updates. Without the
         # row lock, a push can be inserted after the superseded check and its
         # RUNNING state can then be overwritten by this older batch.

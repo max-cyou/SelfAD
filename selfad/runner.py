@@ -118,5 +118,8 @@ from selfad.runtime.types import (
     RunnerError as RunnerError,
 )
 from selfad.runtime.types import (
+    RunnerInfrastructureError as RunnerInfrastructureError,
+)
+from selfad.runtime.types import (
     RuntimeCheckResult as RuntimeCheckResult,
 )

@@ -11,3 +11,4 @@ class RepositoryBatch:
     commit_sha: str | None = None
     source_commit: str | None = None
     jury_commit: str | None = None
+    processing_token: str | None = None

@@ -45,7 +45,11 @@ from selfad.settings import (
     validate_public_event_settings,
 )
 from selfad.web import STATIC_DIR
-from selfad.worker import recover_interrupted_repository_events, run_repository_worker
+from selfad.worker import (
+    recover_interrupted_repository_events,
+    run_repository_watchdog,
+    run_repository_worker,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +152,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             asyncio.create_task(run_repository_worker(stop_event))
             for _ in range(get_worker_concurrency())
         ]
+        worker_tasks.append(asyncio.create_task(run_repository_watchdog(stop_event)))
         try:
             yield
         finally:

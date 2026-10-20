@@ -195,6 +195,19 @@ class SubmissionsTests(unittest.TestCase):
             self.assertEqual(session.get(ParticipantService, 1).attack_score, 0)
             self.assertEqual(len(session.scalars(select(SubmissionAttempt)).all()), 2)
 
+    def test_unevaluated_failure_remains_visible_without_private_details(self):
+        self.start_contest()
+        with Session(self.engine) as session:
+            event = session.get(RepositoryEvent, 1)
+            event.status = RepositoryEventStatus.FAILED
+            event.message = "PRIVATE_RETRY_DIAGNOSTIC"
+            session.commit()
+        response = self.client.get("/submissions?status=error")
+        self.assertEqual(response.context["total"], 2)
+        self.assertIn("No scoring attempt or penalty was recorded", response.text)
+        self.assertNotIn("PRIVATE_RETRY_DIAGNOSTIC", response.text)
+        self.assertEqual(len(response.context["rows"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

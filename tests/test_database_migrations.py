@@ -39,7 +39,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     version = connection.scalar(
                         text("SELECT version_num FROM alembic_version")
                     )
-                self.assertEqual(version, "0003")
+                self.assertEqual(version, "0004")
                 service_checks = {
                     check["name"]: check["sqltext"]
                     for check in schema.get_check_constraints("services")
@@ -50,6 +50,30 @@ class DatabaseMigrationTests(unittest.TestCase):
                     for column in schema.get_columns("services")
                 }
                 self.assertEqual(service_columns["status"]["type"].length, 14)
+            finally:
+                engine.dispose()
+
+    def test_worker_recovery_upgrade_preserves_existing_events(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database_url = f"sqlite:///{Path(directory) / 'upgrade.db'}"
+            self._initialize(database_url)
+            engine = create_engine(database_url)
+            try:
+                with engine.begin() as connection:
+                    for column in ("heartbeat_at", "retry_after", "scored_at"):
+                        connection.execute(text(f"ALTER TABLE repository_events DROP COLUMN {column}"))
+                    connection.execute(text("UPDATE alembic_version SET version_num = '0003'"))
+                    connection.execute(text(
+                        "INSERT INTO repository_events "
+                        "(delivery_id, repository_path, ref, commit_sha, status, attempts, message, received_at) "
+                        "VALUES ('upgrade', 'player/attack', 'refs/heads/main', 'abc', "
+                        "'pending', 0, '', CURRENT_TIMESTAMP)"
+                    ))
+                self._initialize(database_url)
+                columns = {column["name"] for column in inspect(engine).get_columns("repository_events")}
+                self.assertTrue({"heartbeat_at", "retry_after", "scored_at"} <= columns)
+                with engine.connect() as connection:
+                    self.assertEqual(connection.scalar(text("SELECT COUNT(*) FROM repository_events")), 1)
             finally:
                 engine.dispose()
 
@@ -82,7 +106,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     version = connection.scalar(
                         text("SELECT version_num FROM alembic_version")
                     )
-                self.assertEqual(version, "0003")
+                self.assertEqual(version, "0004")
                 columns = {
                     column["name"]
                     for column in inspect(engine).get_columns("instance_config")

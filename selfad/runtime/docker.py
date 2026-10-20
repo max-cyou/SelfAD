@@ -11,6 +11,7 @@ from selfad.runtime.types import (
     WORK_DIR,
     CommandResult,
     RunnerError,
+    RunnerInfrastructureError,
 )
 from selfad.settings import (
     get_runner_instance_id,
@@ -118,12 +119,29 @@ def _docker(
             environment.pop("DOCKER_CERT_PATH", None)
         environment["HOME"] = home
         environment["DOCKER_CONFIG"] = str(Path(home) / ".docker")
-        return _run_command(
-            ["docker", *arguments],
-            timeout=timeout,
-            max_output=max_output,
-            environment=environment,
-        )
+        def daemon_available():
+            try:
+                return _run_command(
+                    ["docker", "info", "--format", "{{.ServerVersion}}"],
+                    timeout=10, max_output=MAX_COMMAND_OUTPUT, environment=environment,
+                ).returncode == 0
+            except RunnerError:
+                return False
+
+        try:
+            result = _run_command(
+                ["docker", *arguments], timeout=timeout,
+                max_output=max_output, environment=environment,
+            )
+        except RunnerError as error:
+            if arguments[0] != "info" and not daemon_available():
+                raise RunnerInfrastructureError("Docker runner connection lost.") from error
+            raise
+        # Do not classify failures from contestant-controlled stdout/stderr.
+        # Verify daemon availability independently before granting a free retry.
+        if result.returncode != 0 and arguments[0] != "info" and not daemon_available():
+            raise RunnerInfrastructureError("Docker runner connection lost.")
+        return result
 
 
 def _docker_quiet(arguments: list[str]) -> None:

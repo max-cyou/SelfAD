@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -141,6 +142,8 @@ class WorkerQueueTests(unittest.TestCase):
                     commit_sha="a" * 40,
                     status=RepositoryEventStatus.PROCESSING,
                     processing_token="worker",
+                    processing_started_at=datetime.now(timezone.utc),
+                    heartbeat_at=datetime.now(timezone.utc),
                 )
                 session.add(event)
                 session.flush()
@@ -150,6 +153,7 @@ class WorkerQueueTests(unittest.TestCase):
                     repository_generation=service.repository_generation,
                     source_commit="a" * 40,
                     jury_commit="b" * 40,
+                    processing_token="worker",
                 )
                 session.commit()
 

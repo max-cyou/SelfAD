@@ -27,6 +27,10 @@ class RunnerError(Exception):
     pass
 
 
+class RunnerInfrastructureError(RunnerError):
+    """Confirmed runner transport/availability failure, not a contestant error."""
+
+
 @dataclass(frozen=True)
 class CommandResult:
     returncode: int

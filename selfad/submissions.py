@@ -57,7 +57,8 @@ def history_query(user_id: int | None = None):
         case((event.repository_path == ParticipantService.attack_repository_path, "attack"),
              else_="defense"),
         event.commit_sha,
-        case((event.status == RepositoryEventStatus.PENDING, "queued"), else_="running"),
+        case((event.status == RepositoryEventStatus.PENDING, "queued"),
+             (event.status == RepositoryEventStatus.FAILED, "error"), else_="running"),
         literal(None), literal(None), literal(None), literal(False), literal(False),
         literal(None), literal(None), literal(None), literal(None),
         event.message if user_id is None else literal(""),
@@ -67,7 +68,9 @@ def history_query(user_id: int | None = None):
     )).join(User, User.id == ParticipantService.user_id).join(
         Service, Service.id == ParticipantService.service_id,
     ).where(
-        event.status.in_([RepositoryEventStatus.PENDING, RepositoryEventStatus.PROCESSING]),
+        event.status.in_([RepositoryEventStatus.PENDING, RepositoryEventStatus.PROCESSING,
+                          RepositoryEventStatus.FAILED]),
+        event.scored_at.is_(None),
         event.ref == literal("refs/heads/") + Service.default_branch,
     )
     if user_id is not None:

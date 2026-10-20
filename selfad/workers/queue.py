@@ -11,6 +11,7 @@ from selfad.models import (
     RepositoryEventStatus,
     Service,
 )
+from selfad.workers.recovery import recover_stale_batches
 from selfad.workers.types import (
     RepositoryBatch,
 )
@@ -18,19 +19,7 @@ from selfad.workers.types import (
 
 def recover_interrupted_repository_events() -> int:
     """Return jobs left in-flight by a stopped control-plane process to queue."""
-    with SessionLocal() as session:
-        recovered = session.execute(
-            update(RepositoryEvent)
-            .where(RepositoryEvent.status == RepositoryEventStatus.PROCESSING)
-            .values(
-                status=RepositoryEventStatus.PENDING,
-                processing_token=None,
-                processing_started_at=None,
-                message="Recovered after the worker restarted.",
-            )
-        )
-        session.commit()
-        return recovered.rowcount or 0
+    return recover_stale_batches(restart=True)
 
 
 def _claim_repository_batch() -> RepositoryBatch | None:
@@ -38,6 +27,8 @@ def _claim_repository_batch() -> RepositoryBatch | None:
         pending_events = session.scalars(
             select(RepositoryEvent)
             .where(RepositoryEvent.status == RepositoryEventStatus.PENDING)
+            .where(or_(RepositoryEvent.retry_after.is_(None),
+                       RepositoryEvent.retry_after <= datetime.now(timezone.utc)))
             .order_by(RepositoryEvent.id)
             .limit(100)
         ).all()
@@ -118,12 +109,16 @@ def _claim_repository_batch() -> RepositoryBatch | None:
                 .where(
                     RepositoryEvent.status == RepositoryEventStatus.PENDING,
                     RepositoryEvent.repository_path == event.repository_path,
+                    or_(RepositoryEvent.retry_after.is_(None),
+                        RepositoryEvent.retry_after <= datetime.now(timezone.utc)),
                 )
                 .values(
                     status=RepositoryEventStatus.PROCESSING,
                     attempts=RepositoryEvent.attempts + 1,
                     processing_token=claim_token,
                     processing_started_at=datetime.now(timezone.utc),
+                    heartbeat_at=datetime.now(timezone.utc),
+                    retry_after=None,
                     message="Participant check started.",
                 )
             )
@@ -156,6 +151,7 @@ def _claim_repository_batch() -> RepositoryBatch | None:
                 participant_service_id=participant_service.id,
                 repository_path=event.repository_path,
                 commit_sha=latest_event.commit_sha,
+                processing_token=claim_token,
             )
 
         claim_token = uuid.uuid4().hex
@@ -164,12 +160,16 @@ def _claim_repository_batch() -> RepositoryBatch | None:
             .where(
                 RepositoryEvent.status == RepositoryEventStatus.PENDING,
                 RepositoryEvent.repository_path.in_(repository_paths),
+                or_(RepositoryEvent.retry_after.is_(None),
+                    RepositoryEvent.retry_after <= datetime.now(timezone.utc)),
             )
             .values(
                 status=RepositoryEventStatus.PROCESSING,
                 attempts=RepositoryEvent.attempts + 1,
                 processing_token=claim_token,
                 processing_started_at=datetime.now(timezone.utc),
+                heartbeat_at=datetime.now(timezone.utc),
+                retry_after=None,
                 message="Repository check started.",
             )
         )
@@ -193,6 +193,7 @@ def _claim_repository_batch() -> RepositoryBatch | None:
             repository_generation=service.repository_generation,
             source_commit=latest_commits.get(service.repository_path),
             jury_commit=latest_commits.get(service.jury_repository_path or ""),
+            processing_token=claim_token,
         )
 
 
@@ -223,6 +224,8 @@ def _finish_events(
             status=status,
             processing_token=None,
             processing_started_at=None,
+            heartbeat_at=None,
+            retry_after=None,
             message=message[:2_000],
             processed_at=datetime.now(timezone.utc),
         )

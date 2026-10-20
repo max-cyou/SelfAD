@@ -1,11 +1,12 @@
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from sqlalchemy import update
 
 from selfad.database import SessionLocal
-from selfad.gitea import GiteaError, get_branch_commit
+from selfad.gitea import GiteaError, GiteaUnavailable, get_branch_commit
 from selfad.models import (
     RepositoryEventStatus,
     Service,
@@ -17,6 +18,7 @@ from selfad.runner import (
     RunnerError,
     run_service_runtime_check,
 )
+from selfad.runtime.types import RunnerInfrastructureError
 from selfad.service_contract import validate_service_contract
 from selfad.settings import get_gitea_settings
 from selfad.workers.participant import (
@@ -31,6 +33,13 @@ from selfad.workers.queue import (
 )
 from selfad.workers.queue import (
     recover_interrupted_repository_events as recover_interrupted_repository_events,
+)
+from selfad.workers.recovery import (
+    HEARTBEAT_SECONDS,
+    lock_batch,
+    maintain_batch_lease,
+    recover_stale_batches,
+    retry_batch,
 )
 from selfad.workers.types import (
     RepositoryBatch,
@@ -54,14 +63,49 @@ async def run_repository_worker(stop_event: asyncio.Event) -> None:
             pass
 
 
+async def run_repository_watchdog(stop_event: asyncio.Event) -> None:
+    # Recovery must not queue behind stuck jobs in asyncio's shared executor.
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="selfad-watchdog")
+    try:
+        while not stop_event.is_set():
+            try:
+                await asyncio.get_running_loop().run_in_executor(executor, recover_stale_batches)
+            except Exception:
+                logger.exception("Repository lease recovery failed.")
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=HEARTBEAT_SECONDS)
+            except TimeoutError:
+                pass
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 def process_next_repository_batch() -> bool:
     batch = _claim_repository_batch()
     if batch is None:
         return False
+    if batch.service_id == -1:
+        return True
+    with maintain_batch_lease(batch):
+        try:
+            return _process_claimed_batch(batch)
+        except (GiteaUnavailable, RunnerInfrastructureError) as error:
+            retry_batch(batch, str(error))
+            logger.warning("Repository infrastructure unavailable; scheduled retry: %s", error)
+            return True
+        except Exception as error:
+            retry_batch(batch, str(error))
+            logger.exception("Repository batch failed; scheduled infrastructure recovery.")
+            return True
+
+
+def _process_claimed_batch(batch: RepositoryBatch) -> bool:
     if batch.participant_service_id is not None:
         return _process_participant_batch(batch)
 
     with SessionLocal() as session:
+        if not lock_batch(session, batch):
+            return True
         service = session.get(Service, batch.service_id)
         if service is None:
             _finish_events(
@@ -103,12 +147,16 @@ def process_next_repository_batch() -> bool:
             source_commit=source_commit,
             jury_commit=jury_commit,
         )
+    except GiteaUnavailable:
+        raise
     except GiteaError as error:
         _finish_batch_as_failure(batch, str(error))
         return True
 
     if not contract.valid:
         with SessionLocal() as session:
+            if not lock_batch(session, batch):
+                return True
             execution = session.execute(
                 update(Service)
                 .where(
@@ -144,6 +192,8 @@ def process_next_repository_batch() -> bool:
         return True
 
     with SessionLocal() as session:
+        if not lock_batch(session, batch):
+            return True
         execution = session.execute(
             update(Service)
             .where(
@@ -186,11 +236,15 @@ def process_next_repository_batch() -> bool:
             contract=contract,
             cache_service_image=True,
         )
+    except (GiteaUnavailable, RunnerInfrastructureError):
+        raise
     except (GiteaError, RunnerError) as error:
         _finish_batch_as_failure(batch, str(error), contract_is_valid=True)
         return True
 
     with SessionLocal() as session:
+        if not lock_batch(session, batch):
+            return True
         execution = session.execute(
             update(Service)
             .where(
@@ -228,6 +282,8 @@ def _finish_batch_as_failure(
     contract_is_valid: bool = False,
 ) -> None:
     with SessionLocal() as session:
+        if not lock_batch(session, batch):
+            return
         values: dict[str, object] = {
             "status": ServiceStatus.DRAFT,
             "runtime_status": ServiceRunStatus.FAILED,

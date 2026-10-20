@@ -37,6 +37,7 @@ from selfad.runtime.types import (
     SERVICE_CACHE_LABEL,
     WORK_DIR,
     RunnerError,
+    RunnerInfrastructureError,
     RuntimeCheckResult,
 )
 from selfad.service_contract import ServiceContractResult
@@ -65,7 +66,7 @@ def run_service_runtime_check(
     ):
         raise RunnerError("A valid repository contract is required.")
     if not runner_is_available():
-        raise RunnerError("The configured Docker runner is unavailable.")
+        raise RunnerInfrastructureError("The configured Docker runner is unavailable.")
 
     service_image_cached = False
     service_cache_lock_held = False
@@ -355,6 +356,8 @@ def run_service_runtime_check(
                 True,
                 stdout_noise,
             )
+        except RunnerInfrastructureError:
+            raise
         except RunnerError as error:
             return RuntimeCheckResult(
                 False,
